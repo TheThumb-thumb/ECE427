@@ -9,7 +9,10 @@ import le_types::*;
     input logic                         adc_wr,
     input logic                         req,    // Requesting encryption keys
 
-    output logic test
+    output logic [KEY_WIDTH-1:0]        p,
+    output logic [KEY_WIDTH-1:0]        q
+    // maybe a done signal as well saying key is generated prepare to receive on bus?
+    // ^^ might be handled based on bus protocol
 
 );
     trivium_state_t curr_state, next_state;
@@ -26,8 +29,21 @@ import le_types::*;
          .data(adc_in),
          .vector(vector),
          .full(full)
-    )
+    );
 
+    trivium rng (
+        .clk(clk),
+        .rst(rst),
+        .iv_(iv_),
+        .key_(key_),
+
+        .state(curr_state),
+        .done(done),
+        .p(p),
+        .q(q)
+    );
+
+    assign iv_full = full;
     assign deque = (full && curr_state != IDLE) ? '1 : '0;
     assign iv_ = iv_full ? vector : 'x;
     assign key_ = key_full ? vector : 'x;
