@@ -1,18 +1,15 @@
-module adc_rng_fifo #(
-    parameter ADC_WIDTH = 8;
-    parameter FIF0_DEPTH = 10;
-)
+module adc_rng_fifo 
+import params::*;
+
 (
     input clk,
     input rst,
     input logic enque,
     input logic deque,
-    input logic [ADC_WIDTH-1:0] data,
+    input logic data,
 
-    output logic [ADC_WIDTH*FIF0_DEPTH-1:0] vector,
-    output logic full,
-    output logic empty
-
+    output logic [ADC_FIF0_DEPTH-1:0] vector,
+    output logic full
 );
 
     typedef enum logic [1:0] {
@@ -25,9 +22,10 @@ module adc_rng_fifo #(
 
     logic [3:0] head_next, head_cur;
     //  count_cur, count_next;
-    logic [ADC_WIDTH-1:0] vector_cur  [FIF0_DEPTH];
-    logic [ADC_WIDTH-1:0] vector_next [FIF0_DEPTH];
+    logic [ADC_FIF0_DEPTH-1:0] vector_cur;
+    logic [ADC_FIF0_DEPTH-1:0] vector_next;
     logic overflow;
+    logic empty;
 
     always_ff @(posedge clk) begin
 
@@ -60,7 +58,7 @@ module adc_rng_fifo #(
 
             rd : begin
                 if (!empty) begin
-                    vector = {<<{vector_cur}};
+                    vector = vector_cur;
                     head_next = '0;
                     // count_next = '0;
                     // tail_next = '0;
@@ -78,7 +76,7 @@ module adc_rng_fifo #(
 
             rd_wr : begin
 
-                vector = {<<{vector_cur}};
+                vector = vector_cur;
                 head_next = 1'b1;
                 // count_next = 1'b1;
                 vector_next[head_next] = data;
