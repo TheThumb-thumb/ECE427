@@ -13,7 +13,6 @@ import le_types::*;
     input trivium_state_t state,
 
     output logic done,
-    output logic iv_full,
     output logic [KEY_WIDTH-1:0] p,
     output logic [KEY_WIDTH-1:0] q
 
@@ -41,11 +40,11 @@ import le_types::*;
         gt3 = 'x;
         key1 = 'x;
         key2 = 'x;
-        if (curr_state == IDLE || IV_GEN) begin
+        if (state == IDLE || IV_GEN) begin
             key1 = '0;
             key2 = '0;
         end
-        else if (curr_state == SETUP) begin
+        else if (state == SETUP) begin
             t1 = internal_state[65] + internal_state[90] & internal_state[91] + internal_state[93] + internal_state[171];
             t2 = internal_state[161] + internal_state[175] & internal_state[176] + internal_state[177] + internal_state[264];
             t3 = internal_state[243] + internal_state[286] & internal_state[287] + internal_state[288] + internal_state[69];
@@ -54,7 +53,7 @@ import le_types::*;
             internal_state_next[176:93] = {t1, internal_state[175:93]};
             internal_state_next[STATE-1:177] = {t2, internal_state[286:177]};
         end 
-        else if (curr_state == GEN) begin
+        else if (state == GEN) begin
 
             t1 = internal_state[65] + internal_state[92];
             t2 = internal_state[161] + internal_state[176];
@@ -96,7 +95,7 @@ import le_types::*;
         end else begin
             internal_state <= internal_state_next;
             count <= '0;
-            if (curr_state == GEN) begin
+            if (state == GEN) begin
                 count <= count + 1'b1;
                 if (count == KEY_WIDTH) begin
                     count <= '0;
