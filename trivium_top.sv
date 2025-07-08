@@ -1,40 +1,100 @@
-module trivium_top #(
-    parameter ADC_WIDTH = 8;
-    parameter IV_WIDTH = 80;
-    parameter SETUP_TIME = 1151; // Cycles needed for trivium to cycle through internal state 4 times = 4 x 288 = 1152
-)(
+module trivium_top 
+import params::*;
+import le_types::*;
+(
 
     input logic                         clk,
     input logic                         rst,
-    input logic [ADC_WIDTH-1:0]         adc_in,
+    input logic                         adc_in,
     input logic                         adc_wr,
+    input logic                         req,    // Requesting encryption keys
 
     output logic test
 
 );
+    trivium_state_t curr_state, next_state;
 
-
-    enum logic [1:0] {IDLE=0, SETUP, GEN} curr_state, next_state;
+    logic [IV_WIDTH-1:0] iv_, key_, vector;
     logic [10:0] setup_cnt;
-    logic iv_full, iv_empty, done;
+    logic iv_full, iv_empty, done, key_full, cs_en, full, deque, key_req;
+
+    adc_rng_fifo fifo0 (
+         .clk(clk),
+         .rst(rst),
+         .enque(adc_wr),
+         .deque(deque),
+         .data(adc_in),
+         .vector(vector),
+         .full(full)
+    )
+
+    assign deque = (full && curr_state != IDLE) ? '1 : '0;
+    assign iv_ = iv_full ? vector : 'x;
+    assign key_ = key_full ? vector : 'x;
 
     always_comb begin
-        next_state = IDLE;
+        next_state = IDLE; 
+        key_full = '0;
+        cs_en = '0;
+        key_req = '0;
         if (rst) begin
             next_state = IDLE;
         end
-        else if (setup_cnt == SETUP_TIME) begin
-            next_state = GEN;
-        end
-        else if (done) begin
-            next_state = IDLE;
-        end
-        else if (iv_full) begin
-            next_state = SETUP;
-        end
-        else begin
-            next_state = IDLE;
-        end
+
+    /*  IDLE - Do nothing until request is sent for a key
+        IV_GEN - Random key generated from ADC
+        SETUP - Random iv generated from ADC start trivium setup
+        GEN - Generating keys for encryption and hashing -> check for primality before validation */
+
+        unique case (curr_state)
+            IDLE: begin
+
+                cs_en = 1'b0;
+                if (req) begin
+                    key_req = 1'b1;
+                end
+                else if (iv_full && key_req) begin
+                    key_full = 1'b1;
+                    next_state = IV_GEN;
+                    key_req = 1'b0;
+                end
+
+            end
+
+            IV_GEN: begin
+
+                cs_en = 1'b0;
+                if (iv_full) begin
+                    key_full = 1'b0;
+                    next_state = SETUP;
+                end
+
+            end
+
+            SETUP: begin
+
+                cs_en = 1'b1;
+                if (setup_cnt == SETUP_TIME) begin
+                    next_state = GEN;
+                end
+
+            end
+
+            GEN: begin
+
+                cs_en = 1'b1;
+                if (done) begin
+                    next_state = IDLE;
+                end
+
+            end
+
+            default: begin
+                cs_en = 'x;
+                next_state = 'x;
+                key_full = 'x;
+            end
+        endcase
 
     end
 
@@ -45,9 +105,15 @@ module trivium_top #(
         setup_cnt <= '0;
         if (curr_state == SETUP) begin
             setup_cnt <= setup_cnt + 1'b1;
+        end else if (curr_state == GEN) begin
+            if (setup_cnt == SETUP_TIME) begin
+                setup_cnt <= '0;
+            end
+            setup_cnt <= setup_cnt + 1'b1;
         end
+
     end
 
-    
+
 
 endmodule : trivium_top
