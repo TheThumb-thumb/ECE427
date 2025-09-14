@@ -24,26 +24,32 @@ initial rst= 1'b0;
     // // outputs for controlling entropy source calibration
     // output logic [7:0] calibration_arr_n,   // controls the number of 1s
     // output logic [7:0] calibration_arr_p    // controls the number of 0s
-
-    logic adc_in, adc_en, deque;
+    logic adc_en;
+    logic adc_in, deque;
     logic inter_fail, perm_fail, good_entropy_out, full, empty;
     logic [7:0] calibration_arr_n, calibration_arr_p;
-    logic [SAMPLE_SIZE-1:0] check_noise;
+    logic [SAMPLE_SIZE-1:0] checked_noise;
     logic clk_div;
+    logic [1023:0] input_val, input_val_next;
 
     always_ff @(posedge clk) begin
         if (rst) begin
             adc_in <= '0;
             adc_en <= '0;
+            // input_val <= 1024'h3b827e8a159955d7f1d5d36e896489816e87b7a637d77b8b76c8c4943f25c7e9;
+            input_val <= '1;
             deque <= '0;
             clk_div <= '0;
         end else begin
 
-            adc_in <= $urandom();
-            deque <= empty ? '0 : $urandom();
+            // adc_in <= $urandom();
+            input_val_next = {input_val[1023:1], 1'b0};
+            adc_in <= input_val[1023];
+            // deque <= empty ? '0 : $urandom();
+            deque <= '0;
             clk_div <= clk_div + 1;
             if (clk_div) begin
-                adc_en <= '1;
+            adc_en <= '1;
             end else begin
                 adc_en <= '0;
             end
@@ -76,7 +82,7 @@ initial rst= 1'b0;
 		rst = 1'b1;
         #10ns
 		rst = 1'b0;
-		#1000ns
+		#10000ns
 		$finish();
 	end
 

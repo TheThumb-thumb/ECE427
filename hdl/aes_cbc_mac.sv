@@ -18,13 +18,14 @@ module aes_cbc_mac #(
     output logic        done_o,                 // MAC calculation is complete
 
     // Data Ports
-    input  logic [(DATA_WIDTH/2)-1:0]   key_i,          // The 128-bit secret key
+    input  logic [127:0]                key_i,          // The 128-bit secret key
     input  logic [DATA_WIDTH-1:0]       message_i,      // 256-bit message
     output logic [DATA_WIDTH-1:0]       mac_o           // The resulting MAC
 );
 
 logic data_in_valid, data_out_valid;
-logic [127:0] key, message, data_out;
+logic [127:0] key, key_reg, message, data_out;
+logic [255:0] message_reg;
 
 typedef enum logic [1:0] { 
     IDLE,
@@ -48,43 +49,55 @@ logic [127:0] first_half_register;
 always_ff @ (posedge clk) begin : cbc_mac_bookkeeping
     if(!rst_n) begin
         first_half_register <= '0;
+        key_reg <= '0;
+        message_reg <= '0;
     end else begin
-        
+        if(start_i && current_state == IDLE) begin
+            key_reg <= key_i;
+            message_reg <= message_i;
+        end
+
+        if(current_state == FIRST_HALF && data_out_valid) begin
+            message_reg[127:0] <= data_out;
+        end
     end
 end
 
 always_comb begin : cbc_mac_transitions
    next_state = current_state;
-   key = 'x;
-   message = 'x;
-   data_in_valid = 1'b0;
-   done_o = 1'b0;
    unique case (current_state) 
 
     IDLE: begin    
         if(start_i) begin
             next_state = FIRST_HALF;
         end
+        key <= 'x;
+        message <= 'x;
+        data_in_valid = 1'b0;
+        done_o = 1'b0;
     end
 
     FIRST_HALF: begin
-        key = key_i;
-        message = message_i[127:0];
+        key = key_reg;
+        message = message_reg[127:0];
         data_in_valid = 1'b1;
+        if(data_out_valid) next_state = SECOND_HALF;
     end
 
     SECOND_HALF: begin
-        key = key_i;
-        message = message_i[255:128] ^ data_out;
+        key = key_reg;
+        message = message_reg[255:128] ^ message_reg[127:0];
         data_in_valid = 1'b1;
+        if(data_out_valid) next_state = DONE;
     end
 
     DONE: begin
         done_o = 1'b1;
+        next_state = IDLE;
     end
 
     default: begin
-        
+
     end
 
    endcase

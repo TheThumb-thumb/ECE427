@@ -27,23 +27,12 @@ module aes_core(
     output logic [127:0]   data_out_o          // 128-bit encrypted data block
 );
 
-    //--------------------------------------------------------------------------
-    // State Machine Definition
-    //--------------------------------------------------------------------------
-    typedef enum logic [2:0] {
-        S_IDLE,
-        S_INIT_ADD_KEY,
-        S_PROCESS_ROUNDS,
-        S_FINAL_ROUND,
-        S_DONE
-    } state_t;
-
-    state_t state_reg, state_next;
+    aes_core_state_t state_reg, state_next;
 
     //--------------------------------------------------------------------------
     // Datapath Registers
     //--------------------------------------------------------------------------
-    logic [127:0] key_reg;             // Registers the key for the duration of the encryption
+    logic [127:0] key_reg, key_reg_i;  // Registers the key for the duration of the encryption
     logic [127:0] aes_state_reg;       // Holds the intermediate state between rounds
     logic [3:0]   round_counter_reg;   // Counts the 9 main rounds (from 1 to 9)
     logic [127:0] data_out_reg;        // Registers the final output
@@ -65,10 +54,12 @@ module aes_core(
     key_schedule key_schedule_inst (
         .clk            (clk),
         .rst_n          (rst_n),
-        .start_i        (data_in_valid_i),
+        .state_reg      (state_reg),
         .key_in_i       (key_reg),
         .cur_round_key_o(current_round_key)
     );
+
+    assign key_reg = (state_reg == S_PROCESS_ROUNDS) ? key_reg : key_in_i; 
 
     // A single standard round instance, reused for rounds 1 through 9
     aes_round aes_round_inst (
@@ -125,8 +116,8 @@ module aes_core(
         if (!rst_n) begin
             state_reg         <= S_IDLE;
             aes_state_reg     <= 128'b0;
-            key_reg           <= 128'b0;
-            round_counter_reg <= 4'b0;
+            key_reg_i         <= 128'b0;
+            round_counter_reg <= 4'd1;
             data_out_reg      <= 128'b0;
             data_out_valid_reg<= 1'b0;
         end else begin
@@ -138,7 +129,7 @@ module aes_core(
                 S_IDLE: begin
                     if (data_in_valid_i) begin
                         // Latch inputs and start the process
-                        key_reg <= key_in_i;
+                        key_reg_i <= key_in_i;
                         aes_state_reg <= data_in_i;
                         round_counter_reg <= 4'd1; // Initialize for the first round
                     end
@@ -146,7 +137,7 @@ module aes_core(
                 
                 S_INIT_ADD_KEY: begin
                     // Perform the initial AddRoundKey operation
-                    aes_state_reg <= aes_state_reg ^ current_round_key;
+                    aes_state_reg <= key_reg_i ^ aes_state_reg;
                 end
                 
                 S_PROCESS_ROUNDS: begin

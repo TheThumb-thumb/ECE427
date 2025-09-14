@@ -14,6 +14,13 @@ endpackage : params
 package le_types;
 
     typedef enum logic [1:0] {
+        idle = 2'b00,
+        que_wr = 2'b10,
+        que_rd = 2'b01,
+        que_rd_wr = 2'b11
+    } fifo_state_t;
+
+    typedef enum logic [1:0] {
         TRIV_IDLE, 
         IV_GEN, 
         SETUP, 
@@ -31,43 +38,16 @@ package le_types;
         _64bit   = 2'b10
     } rand_width_t;
 
-    // typedef enum logic [2:0] {
-
-    //     // Idle while generating primes from trng
-    //     ENCR_IDLE,
-    //     // from Idle we go into primality once the trng outputs two odd random values
-    //     PRIMALITY,
-    //     // if primality fails then go into idle after dumping values and wait for two random values again
-    //     // Modulus is waiting for p*q to output for our key n to be generated of length 2048
-    //     MODULUS,
-    //     // find lcm(p-1, q-1) using euclidean algo
-    //     LAMBDA,
-    //     // check if e we picked is coprime, e is between 1 < lcm(p-1,q-1)
-    //     COPRIME,
-    //     // e inverse mod lambda of n is d which is our secret decryption key! find d using extended euclid algo
-    //     INVERSE,
-    //     // output public key, store decryption key, discard everything else and return back to idle
-    //     ENCR_DONE
-
-    // } encryption_state_t;
-
-    // typedef enum logic [2:0] {
-    //     GCD_IDLE,    
-    //     INIT_K,
-    //     NORMALIZE_A,
-    //     NORMALIZE_B,
-    //     COMPUTE,
-    //     GCD_DONE
-    // } gcd_state_t;
-
-    // typedef enum logic [2:0] {
-    //     IDLE,
-    //     MONT_SPACE_A,
-    //     MONT_SPACE_B,
-    //     MONT_MULT,
-    //     INVERSE,
-    //     DONE
-    // } mont_mult_state_t;
+    //--------------------------------------------------------------------------
+    // AES core State machine
+    //--------------------------------------------------------------------------
+    typedef enum logic [2:0] {
+        S_IDLE,
+        S_INIT_ADD_KEY,
+        S_PROCESS_ROUNDS,
+        S_FINAL_ROUND,
+        S_DONE
+    } aes_core_state_t;
 
 
 endpackage: le_types

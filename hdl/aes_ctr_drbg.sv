@@ -15,9 +15,7 @@ Interfaxes:
 
 
 In Progress: 
-    - for now this keeps the simplified DF (aes_df) by default, but can swap later 
-      for aes_df 90A fully compliant w/ out changing this module
-    - finish the rest of the combinational logic
+    - finished coding, tsting out seed gaurd & gen logic
 */
 
 
@@ -49,7 +47,7 @@ module aes_ctr_drbg #(
     output  logic         busy_o,
     output  logic         done_o,                      // pulses when op complete
     output  logic         random_valid_o,
-    output  logic [KEY_BITS-1:0] random_block_o,                     
+    output  logic [KEY_BITS-1:0] random_block_o                  
 
 );
 
@@ -61,6 +59,7 @@ typedef enum logic [3:0] {
     S_UPDATE_INIT_START2, S_UPDATE_INIT_WAIT2, S_UPDATE_INIT_MIX,
     // gen path
     S_GEN_REQ, S_GEN_WAIT, S_GEN_OUT,
+    // after gen
     S_UPDATE_AFTER_START1, S_UPDATE_AFTER_WAIT1,
     S_UPDATE_AFTER_START2, S_UPDATE_AFTER_WAIT2, S_UPDATE_AFTER_MIX
 } state_t;
@@ -84,12 +83,13 @@ logic [DATA_WIDTH-1:0] provided_data_reg, provided_data_n;
 logic [KEY_BITS-1:0] temp0_reg, temp0_n, temp1_reg, temp1_n;
 
 // AES core wires?
-logic [KEY_BITS-1:0] aes_in_block;
-logic aes_in_valid, aes_out_block, aes_out_valid;
+logic [KEY_BITS-1:0] aes_in_block, aes_out_block;
+logic aes_in_valid, aes_out_valid;
 
-// deriv fucntion wires
-logic [DATA_WIDTH-1:0] df_seed_material
-logic df_start, df_done;
+
+// CBC-MAC(conditioner) wires
+logic cbc_start, cbc_done;
+logic [DATA_WIDTH-1:0] cbc_msg, cbc_mac;
 
 // reseed window
 logic at_reseed_limit;
@@ -101,54 +101,56 @@ logic rnd_valid_set;
 // submodule
 // aes core
 aes_core u_aes_core (
-    .clk              (clk),
-    .rst_n            (rst_n),
-    .data_in_valid_i  (aes_in_valid),
-    .key_in_i         (K_reg),
-    .data_in_i        (aes_in_block),
+    .clk (clk),
+    .rst_n (rst_n),
+    .data_in_valid_i (aes_in_valid),
+    .key_in_i (K_reg),
+    .data_in_i (aes_in_block),
     .data_out_valid_o (aes_out_valid),
-    .data_out_o       (aes_out_block)
-);
-// deric function
-aes_df u_df(
-    .clk              (clk),
-    .rst_n            (rst_n),
-    .start_i(df_start),
-    .entropy_i(entropy_i),
-    .nonce_i(nonce_i),
-    .personalization_i(),
-    .k_df_i(),
-    .done_o(),
-    .seed_material_o()
+    .data_out_o (aes_out_block)
 );
 
-// others(mainly helpers)
+
+// Simple CBC-MAC formatter: XOR 3 256b blocz
+assign cbc_msg = entropy_i ^ nonce_i ^ personalization_i;
+
+// AES-CBC-MAC conditioner (produces 256b MAC = {C1, C2})
+aes_cbc_mac #(.DATA_WIDTH(DATA_WIDTH)) u_cbc (
+    .clk (clk),
+    .rst_n (rst_n),
+    .start_i (cbc_start),
+    .done_o (cbc_done),
+    .key_i (k_df_i[127:0]), // CBC-MAC uses 128-bit key
+    .message_i (cbc_msg),
+    .mac_o (cbc_mac)
+);
+
+
+// others(mainly helper)
 // thinking of using auto function for making big Indian incr for 128b vector
-function automatic [KEY_BITS-1:0] inc128 (input [KEY_BITS-1:0] X);
-    inc128 = x + 128'd1;
+function automatic [KEY_BITS-1:0] inc128 (input [KEY_BITS-1:0] x);
+    inc128 = x + KEY_BITS'(1);
 endfunction
 
+
 // seq:
-always_ff @(posedge clk) begin
-    
-    if(!rst_n)begin
-        state                 <= S_IDLE;
-        K_reg                 <= '0;
-        V_reg                 <= '0;
-        reseed_counter_reg    <= '0;
-        blocks_left_reg       <= '0;
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        state <= S_IDLE;
+        K_reg <= '0;
+        V_reg <= '0;
+        reseed_counter_reg <= '0;
+        blocks_left_reg <= '0;
         op_is_instantiate_reg <= 1'b0;
-        op_is_reseed_reg      <= 1'b0;
-        op_is_generate_reg    <= 1'b0;
-        provided_data_reg     <= '0;
-        temp0_reg             <= '0;
-        temp1_reg             <= '0;
-        random_block_o        <= '0;
-        random_valid_o        <= 1'b0;
-        done_o                <= 1'b0;
-    end
-    
-    else begin
+        op_is_reseed_reg <= 1'b0;
+        op_is_generate_reg <= 1'b0;
+        provided_data_reg <= '0;
+        temp0_reg <= '0;
+        temp1_reg <= '0;
+        random_block_o <= '0;
+        random_valid_o <= 1'b0;
+        done_o <= 1'b0;
+    end else begin
         state <= state_n;
         K_reg <= K_n;
         V_reg <= V_n;
@@ -161,11 +163,12 @@ always_ff @(posedge clk) begin
         temp0_reg <= temp0_n;
         temp1_reg <= temp1_n;
 
-        //outputting pulses (registered)
+        // output pulsin (registered)
         done_o <= done_set;
         random_valid_o <= rnd_valid_set;
-
-        if (rnd_valid_set) random_block_o <= aes_out_block;
+        if (rnd_valid_set) begin
+        random_block_o <= aes_out_block;
+        end
     end
 end
 
@@ -199,7 +202,7 @@ always_comb begin
     rnd_valid_set = 1'b0;
 
     // FSM:
-    unique case(state):
+    unique case (state)
         // idle
         S_IDLE: begin
             // latch command: priority inst -> reseed -> generate
@@ -220,7 +223,7 @@ always_comb begin
                 if (at_reseed_limit) begin
                     // @ reseed window limit: ignore generate request until reseed happens
                     state_n = S_IDLE;
-                    end else begin
+                end else begin
                     op_is_instantiate_n = 1'b0;
                     op_is_reseed_n = 1'b0;
                     op_is_generate_n = 1'b1;
@@ -233,25 +236,142 @@ always_comb begin
         // start
         // inst/reseed: run df -> Update(K,V, seed_material)  
         S_DF_START: begin
-            df_start = 1'b1;         // 1 cycle start
-            state_n = S_DF_WAIT;
+            cbc_start = 1'b1;            // one-cycle start
+            state_n   = S_DF_WAIT;
         end
+
+        //wait 
         S_DF_WAIT: begin
-            if (df_done) begin
-                provided_data_n = df_seed_material;
-                state_n = S_UPDATE_INIT_START1;
+            if (cbc_done) begin
+                provided_data_n = cbc_mac; // 256-bit seed material from conditioner
+                state_n         = S_UPDATE_INIT_START1;
             end
         end
-        // wait
 
-        // updating init
+        // 1st AES for update
+        S_UPDATE_INIT_START1: begin
+            aes_in_block = inc128(V_reg);
+            V_n = aes_in_block;
+            aes_in_valid = 1'b1;
+            state_n = S_UPDATE_INIT_WAIT1;
+        end
+
+        S_UPDATE_INIT_WAIT1: begin
+            if (aes_out_valid) begin
+            temp0_n = aes_out_block;
+            state_n = S_UPDATE_INIT_START2;
+            end
+        end
 
         // 2nd AES for update
+        S_UPDATE_INIT_START2: begin
+            aes_in_block = inc128(V_reg);
+            V_n = aes_in_block;
+            aes_in_valid = 1'b1;
+            state_n = S_UPDATE_INIT_WAIT2;
+        end
 
+        S_UPDATE_INIT_WAIT2: begin
+            if (aes_out_valid) begin
+            temp1_n = aes_out_block;
+            state_n = S_UPDATE_INIT_MIX;
+            end
+        end
+        
         // update mixing
+        S_UPDATE_INIT_MIX: begin
+            // temp = (temp0 || temp1) XOR provided_data
+            logic [DATA_WIDTH-1:0] temp_cat;
+            temp_cat = {temp0_reg, temp1_reg} ^ provided_data_reg;
+            K_n = temp_cat[DATA_WIDTH-1 -: KEY_BITS];
+            V_n = temp_cat[KEY_BITS-1:0];
+            reseed_counter_n = 32'd1;
+            done_set = 1'b1;
+            // clear op flags
+            op_is_instantiate_n = 1'b0;
+            op_is_reseed_n = 1'b0;
+            state_n = S_IDLE;
+        end
 
+        // gen blocks: finished
+        S_GEN_REQ: begin
+            if (blocks_left_reg != 16'd0) begin
+            aes_in_block = inc128(V_reg);
+            V_n = aes_in_block;
+            aes_in_valid = 1'b1;
+            state_n = S_GEN_WAIT;
+            end else begin
+            // done generating -> run post gen Update (mix add input)
+            provided_data_n = additional_input_i;
+            state_n = S_UPDATE_AFTER_START1;
+            end
+        end
 
-        // generating blocks: Need to finish
+        S_GEN_WAIT: begin
+            if (aes_out_valid) begin
+            // one block ready this cycle
+            rnd_valid_set = 1'b1;                
+            blocks_left_n = blocks_left_reg - 16'd1;
+            state_n = S_GEN_OUT;
+            end
+        end
+
+        S_GEN_OUT: begin
+            if (blocks_left_n != 16'd0) begin
+            state_n = S_GEN_REQ; // next block
+            end else begin
+            // no more blocks -> post gen Update
+            provided_data_n = additional_input_i;  // can be zeros if this bs not used
+            state_n = S_UPDATE_AFTER_START1;
+            end
+        end
+
+        // Post Gen: Update(K,V, provided_data )
+        S_UPDATE_AFTER_START1: begin
+            aes_in_block = inc128(V_reg);
+            V_n = aes_in_block;
+            aes_in_valid = 1'b1;
+            state_n = S_UPDATE_AFTER_WAIT1;
+        end
+
+        S_UPDATE_AFTER_WAIT1: begin
+            if (aes_out_valid) begin
+            temp0_n = aes_out_block;
+            state_n = S_UPDATE_AFTER_START2;
+            end
+        end
+
+        S_UPDATE_AFTER_START2: begin
+            aes_in_block = inc128(V_reg);
+            V_n = aes_in_block;
+            aes_in_valid = 1'b1;
+            state_n = S_UPDATE_AFTER_WAIT2;
+        end
+
+        S_UPDATE_AFTER_WAIT2: begin
+            if (aes_out_valid) begin
+            temp1_n = aes_out_block;
+            state_n = S_UPDATE_AFTER_MIX;
+            end
+        end
+
+        // on god 
+        S_UPDATE_AFTER_MIX: begin
+            logic [DATA_WIDTH-1:0] temp_cat;
+            temp_cat = {temp0_reg, temp1_reg} ^ provided_data_reg;
+            K_n = temp_cat[DATA_WIDTH-1 -: KEY_BITS];
+            V_n = temp_cat[KEY_BITS-1:0];
+            reseed_counter_n = reseed_counter_reg + 32'd1;
+            done_set = 1'b1;
+            // clear op flag
+            op_is_generate_n = 1'b0;
+            state_n = S_IDLE;
+        end
+
+        default: begin
+            state_n = S_IDLE;
+        end
+
     endcase
 end
 

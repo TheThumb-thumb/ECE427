@@ -1,5 +1,6 @@
 module que
-import rv32i_types::*;
+import le_types::*;
+import params::*;
 #(
 
     parameter DEPTH = 8,
@@ -24,6 +25,8 @@ import rv32i_types::*;
     logic [$clog2(DEPTH)-1:0] head_next, tail_next;
     
     logic [WIDTH-1:0] que_data [DEPTH]; //holds DEPTH instructions that each consist of WIDTH bits
+    logic [WIDTH-1:0] que_data_next [DEPTH];
+
     logic filled;   //indicates overflow
     logic [$clog2(DEPTH):0] counter_reg, counter_next;    //tracks if overflow has occurred or not. if MSB is high, queue is full
     // state_t state;
@@ -32,29 +35,22 @@ import rv32i_types::*;
     // state 1: we have to enque an instruction
     // state 2: we have to deque an instruction
     // state 3: we have to enque and deque an instruction
-    // state 4: full/empty?
-
-    // always_ff @(posedge clk) begin
-
-    //     if (rst)
-    //         state <= idle;
-    //     else
-    //         state <= {enque, deque};
-    //         // state <= state'({enque , deque});
-
-    // end
-
+    
     always_ff @(posedge clk) begin
 
         if (rst || inter_fail || perm_fail) begin
             counter_reg <= '0;
             head_reg <= '0;
             tail_reg <= '0;
+            for (int i =0; i < DEPTH-1; i++) begin
+                que_data[i] <= 'x;
+            end
         end
         else begin
             counter_reg <= counter_next;
             head_reg <= head_next;
             tail_reg <= tail_next;
+            que_data <= que_data_next;
         end
 
     end
@@ -72,6 +68,7 @@ import rv32i_types::*;
                 if (rst) begin // pretty sure this does nothing now
                     head_next = '0;
                     tail_next = '0;
+                    counter_next = '0;
                 end
 
                 // do nothing if rst is low
@@ -83,7 +80,7 @@ import rv32i_types::*;
             begin
                 // enqueue is high -- insert data into tail location of queue and update tail location, if queue is not full
                 if (!counter_reg[$clog2(DEPTH)]) begin
-                    que_data[tail_reg] = wdata;
+                    que_data_next[tail_reg] = wdata;
                     tail_next = tail_reg + 1'b1;
                     counter_next = counter_reg + 1'b1;
                 end
@@ -95,7 +92,7 @@ import rv32i_types::*;
             que_rd:
             begin
                 // dequeue is high -- remove head element by incrementing head location
-                if (!empty && !counter_reg[$clog2(DEPTH)]) begin
+                if (!empty) begin
                     rdata = que_data[head_reg];
                     head_next = head_reg + 1'b1;
                     counter_next = counter_reg - 1'b1;
@@ -107,7 +104,8 @@ import rv32i_types::*;
                 
                 // if enque and deque at the same time then tail should not increment or decrement
                 // 
-                if(empty) begin
+                rdata = 'x;
+                if(empty && !rst) begin
                     //if queue is empty -- do nothing
                     rdata = wdata;
                 end
@@ -117,7 +115,7 @@ import rv32i_types::*;
                     rdata = que_data[head_reg];
                     head_next = head_reg + 1'b1;
 
-                    que_data[tail_reg] = wdata;
+                    que_data_next[tail_reg] = wdata;
                     tail_next = tail_reg + 1'b1;
                 end
                 
@@ -140,10 +138,10 @@ import rv32i_types::*;
         full = 1'b0;
         empty = 1'b0;
 
-        if (counter_next[$clog2(DEPTH)] && head_reg == tail_next)
+        if (counter_reg[$clog2(DEPTH)] && head_reg == tail_reg)
             full = 1'b1;
 
-        if (!counter_next[$clog2(DEPTH)] && head_reg == tail_next)
+        if (!counter_reg[$clog2(DEPTH)] && head_reg == tail_reg)
             empty = 1'b1;
 
     end
