@@ -1,11 +1,12 @@
 /**
- * AES-128 CBC-MAC Top-Level Module
+ * AES-CBC-MAC Conditioner Top-Level Module
  *
- * Generates a 128-bit Message Authentication Code (MAC) for a given
- * message using the AES-CBC-MAC algorithm. Can (and will) be used for
+ * Generates a 256-bit Message Authentication Code (MAC) for a given
+ * message and key using the AES-CBC-MAC algorithm. Will be used for
  * entropy conditioning as per NIST 800-90B whitepaper
  *
  */
+import le_types::*;
 module aes_cbc_mac #(
     parameter DATA_WIDTH = 256
 )(
@@ -27,13 +28,6 @@ logic data_in_valid, data_out_valid;
 logic [127:0] key, key_reg, message, data_out;
 logic [255:0] message_reg;
 
-typedef enum logic [1:0] { 
-    IDLE,
-    FIRST_HALF,
-    SECOND_HALF,
-    DONE
-} aes_cbc_mac_state_t;
-
 aes_cbc_mac_state_t current_state, next_state;
 
 always_ff @ (posedge clk) begin : cbc_mac_states
@@ -48,7 +42,6 @@ logic [127:0] first_half_register;
 
 always_ff @ (posedge clk) begin : cbc_mac_bookkeeping
     if(!rst_n) begin
-        first_half_register <= '0;
         key_reg <= '0;
         message_reg <= '0;
     end else begin
@@ -64,15 +57,20 @@ always_ff @ (posedge clk) begin : cbc_mac_bookkeeping
 end
 
 always_comb begin : cbc_mac_transitions
-   next_state = current_state;
+    next_state = current_state;
+    key = 'x;
+    message = 'x;
+    data_in_valid = 1'b0;
+    done_o = 1'b0;
+
    unique case (current_state) 
 
     IDLE: begin    
         if(start_i) begin
             next_state = FIRST_HALF;
         end
-        key <= 'x;
-        message <= 'x;
+        key = 'x;
+        message = 'x;
         data_in_valid = 1'b0;
         done_o = 1'b0;
     end
@@ -81,19 +79,29 @@ always_comb begin : cbc_mac_transitions
         key = key_reg;
         message = message_reg[127:0];
         data_in_valid = 1'b1;
-        if(data_out_valid) next_state = SECOND_HALF;
+        if(data_out_valid) begin 
+            next_state = SECOND_HALF;
+            data_in_valid = 1'b0;
+        end else begin
+            data_in_valid = 1'b1;
+        end
     end
+
 
     SECOND_HALF: begin
         key = key_reg;
         message = message_reg[255:128] ^ message_reg[127:0];
         data_in_valid = 1'b1;
-        if(data_out_valid) next_state = DONE;
+        if(data_out_valid) begin 
+            next_state = DONE;
+            data_in_valid = 1'b0;
+        end
     end
 
     DONE: begin
         done_o = 1'b1;
         next_state = IDLE;
+        data_in_valid = 1'b0;
     end
 
     default: begin
@@ -103,7 +111,7 @@ always_comb begin : cbc_mac_transitions
    endcase
 end
 
-assign mac_o = {first_half_register, data_out};
+assign mac_o = {data_out, message_reg[127:0]};
 
 aes_core aes (
     .clk(clk),
@@ -117,4 +125,4 @@ aes_core aes (
     .data_out_o(data_out)
 );
 
-endmodule : aes_cbc_mac
+endmodule

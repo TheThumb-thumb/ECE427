@@ -38,9 +38,6 @@ package le_types;
         _64bit   = 2'b10
     } rand_width_t;
 
-    //--------------------------------------------------------------------------
-    // AES core State machine
-    //--------------------------------------------------------------------------
     typedef enum logic [2:0] {
         S_IDLE,
         S_INIT_ADD_KEY,
@@ -48,6 +45,13 @@ package le_types;
         S_FINAL_ROUND,
         S_DONE
     } aes_core_state_t;
+
+    typedef enum logic [1:0] { 
+        IDLE,
+        FIRST_HALF,
+        SECOND_HALF,
+        DONE
+    } aes_cbc_mac_state_t;
 
 
 endpackage: le_types

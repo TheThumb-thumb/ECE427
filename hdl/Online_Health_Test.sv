@@ -24,17 +24,17 @@ import params::*;
 
 );
 
-logic [$clog2(C_PERM)-1:0] counter;
+logic [$clog2(C_PERM)-1:0] counter, counter_next;
 logic [$clog2(SAMPLE_SIZE)-1:0] noise_counter, noise_counter_next;
-logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter;
+logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter, entropy_counter_next;
 logic [SAMPLE_SIZE-1:0] buff_reg, buff_next;
-logic [1:0] enque_counter;
+logic [1:0] enque_counter, enque_counter_next;
 logic enque, rep_fail, adaptive_fail, calibration_pass;
 logic [7:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_curr, calibration_arr_p_next;
 
 // logic bypass_buff_flag;
 // logic bypass_off;
-logic flag;
+// logic flag;
 assign perm_fail = rep_fail && adaptive_fail;
 
 assign enque = !full && (noise_counter == 255) && !inter_fail && !perm_fail;
@@ -49,7 +49,7 @@ que fifo (
     .wdata(buff_next),
     .rdata(checked_noise),
 
-    .enque(enque && flag),
+    .enque(enque),
     .deque(deque),
 
     .full(full),
@@ -71,48 +71,64 @@ que fifo (
 
 // end
 
+always_ff @(posedge adc_en) begin
+    // enque_counter_next <= enque_counter;
+    if (rst) begin
+        enque_counter <= '0;
+    end else if (enque) begin
+        enque_counter <= enque_counter + 1;
+    end else begin
+        // enque_counter <= enque_counter_next;
+    end
+end
+
+always_ff @(posedge adc_en) begin
+    // enque_counter_next <= enque_counter;
+    if (rst) begin
+        entropy_counter <= '0;
+    end else if(inter_fail || rep_fail || adaptive_fail) begin
+        entropy_counter <= '0;
+    end else if (adc_in == 1'b1) begin
+        entropy_counter <= entropy_counter + 1;
+    end else begin
+        // enque_counter <= enque_counter_next;
+    end
+end
+
 always_ff @(posedge clk) begin
 
     buff_next <= buff_reg;
-    counter <= '0;
+    counter_next <= counter;
     noise_counter_next <= noise_counter;
-    entropy_counter <= '0;
+    // entropy_counter_next <= entropy_counter;
 
     if (rst) begin
         buff_reg <= 'x;
         counter <='0;
         noise_counter <= '0;
-        entropy_counter <= '0;
-        flag <= '0;
+        // entropy_counter <= '0;
+        // flag <= '0;
+        // enque_counter <= '0;
     end
     else if (adc_en) begin
         buff_next <= {buff_reg[SAMPLE_SIZE-2:0], adc_in};
-        counter <= counter + 1;
+        counter_next <= counter + 1;
         noise_counter_next <= noise_counter + 1;
-        if (inter_fail || rep_fail || adaptive_fail) begin
-            entropy_counter <= '0;
-        end
-        else if (adc_in == 1'b1) begin
-            entropy_counter <= entropy_counter + 1;
-        end
+        // if (inter_fail || rep_fail || adaptive_fail) begin
+        //     entropy_counter_next <= '0;
+        // end
+        // else if (adc_in == 1'b1) begin
+        //     entropy_counter_next <= entropy_counter + 1;
+        // end
     end
     else begin
-        
-        // do nothing
-        counter <= counter;
+
+        counter <= counter_next;
         noise_counter <=  noise_counter_next;
-        entropy_counter <= entropy_counter;
+        // entropy_counter <= entropy_counter_next;
         buff_reg <= buff_next;
-    end
 
-    if (enque) begin
-        enque_counter <= enque_counter + 1;
-        flag <= '1;
-    end else begin
-        flag <= '0;
-    end
-
-    
+    end    
 
 end
 
@@ -123,11 +139,14 @@ always_comb begin
     rep_fail = '0;
     calibration_pass = '0;
     if (counter == 31) begin
+        calibration_pass = '1;
         if (buff_reg[C_INTER-1:0] == '1 || buff_reg[C_INTER-1:0] == '0) begin
             inter_fail = '1;
+            calibration_pass = 1'b0;
         end
         if (buff_reg[C_PERM-1:0] == '1 || buff_reg[C_PERM-1:0] == '0) begin
             rep_fail = '1;
+            calibration_pass = 1'b0;
         end
     end else begin
         calibration_pass = '1;
@@ -138,7 +157,7 @@ end
 assign calibration_arr_n = calibration_arr_n_curr;
 assign calibration_arr_p = calibration_arr_p_curr;
 
-always_ff @(posedge clk) begin
+always_ff @(posedge adc_en) begin
 
     if (rst) begin
         calibration_arr_n_curr <= 8'b11000000;
@@ -166,7 +185,7 @@ always_comb begin
         if (buff_reg[C_INTER-1:0] == '0) begin
             calibration_arr_p_next = {1'b0, calibration_arr_p[7:1]};
         end
-    end else if (calibration_pass && enque_counter == 2'b11 && enque) begin
+    end else if (calibration_pass && enque_counter == 2'b11) begin
 
             if (entropy_counter < 128 && entropy_counter >= 0) begin                // 0-12.5
                 if (calibration_arr_n_curr != '1) begin

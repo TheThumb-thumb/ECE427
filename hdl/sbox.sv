@@ -11,7 +11,7 @@ module sbox (
     // AES Sbox Look-Up Table (LUT)
     // Ppurely combinational mapping.
     logic [7:0] sbox_lut [256];
-    initial begin
+    always_comb begin
         sbox_lut[8'h00] = 8'h63; sbox_lut[8'h01] = 8'h7c; sbox_lut[8'h02] = 8'h77; sbox_lut[8'h03] = 8'h7b;
         sbox_lut[8'h04] = 8'hf2; sbox_lut[8'h05] = 8'h6b; sbox_lut[8'h06] = 8'h6f; sbox_lut[8'h07] = 8'hc5;
         sbox_lut[8'h08] = 8'h30; sbox_lut[8'h09] = 8'h01; sbox_lut[8'h0a] = 8'h67; sbox_lut[8'h0b] = 8'h2b;

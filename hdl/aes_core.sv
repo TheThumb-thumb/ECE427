@@ -12,6 +12,7 @@
  * from a valid data input to a valid data output.
  *
  */
+import le_types::*;
 module aes_core(
     // System Signals
     input  logic         clk,
@@ -32,7 +33,7 @@ module aes_core(
     //--------------------------------------------------------------------------
     // Datapath Registers
     //--------------------------------------------------------------------------
-    logic [127:0] key_reg, key_reg_i;  // Registers the key for the duration of the encryption
+    logic [127:0] key, key_reg, key_reg_i; // Registers the key for the duration of the encryption
     logic [127:0] aes_state_reg;       // Holds the intermediate state between rounds
     logic [3:0]   round_counter_reg;   // Counts the 9 main rounds (from 1 to 9)
     logic [127:0] data_out_reg;        // Registers the final output
@@ -55,11 +56,11 @@ module aes_core(
         .clk            (clk),
         .rst_n          (rst_n),
         .state_reg      (state_reg),
-        .key_in_i       (key_reg),
+        .key_in_i       (key),
         .cur_round_key_o(current_round_key)
     );
 
-    assign key_reg = (state_reg == S_PROCESS_ROUNDS) ? key_reg : key_in_i; 
+    assign key = (state_reg == S_PROCESS_ROUNDS) ? key_reg : key_in_i; 
 
     // A single standard round instance, reused for rounds 1 through 9
     aes_round aes_round_inst (

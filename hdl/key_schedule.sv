@@ -8,6 +8,7 @@
 // 2. INIT: Loads the input key as the first round key (Round 0).
 // 3. COMPUTE: Spends 10 cycles calculating Round 1 through Round 10 keys.
 // ============================================================================
+import le_types::*;
 module key_schedule (
     input  logic            clk,
     input  logic            rst_n,
@@ -22,7 +23,7 @@ module key_schedule (
 
     // Round constants
     logic [7:0] round_constants [10];
-    initial begin
+    always_comb begin
         round_constants[0] = 8'h01; round_constants[1] = 8'h02; round_constants[2] = 8'h04;
         round_constants[3] = 8'h08; round_constants[4] = 8'h10; round_constants[5] = 8'h20;
         round_constants[6] = 8'h40; round_constants[7] = 8'h80; round_constants[8] = 8'h1B;
@@ -71,7 +72,7 @@ module key_schedule (
 
     // FSM Sequential Logic: Counter Registers
     always_ff @(posedge clk) begin
-        if (!rst_n) begin
+        if (!rst_n || state_reg == S_IDLE) begin
             round_cnt_reg <= 4'd0;
         end else begin
             if(state_reg == S_PROCESS_ROUNDS || state_reg == S_INIT_ADD_KEY) round_cnt_reg <= round_cnt_reg + 1;

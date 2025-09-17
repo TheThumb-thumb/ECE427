@@ -60,6 +60,8 @@ import params::*;
         head_next = head_reg;
         tail_next = tail_reg;
         counter_next = counter_reg;
+        que_data_next = que_data;
+        rdata = 'x;
         
         unique case ({enque, deque})
 
