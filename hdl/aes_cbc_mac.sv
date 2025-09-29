@@ -38,14 +38,18 @@ always_ff @ (posedge clk) begin : cbc_mac_states
    end 
 end
 
+logic test;
+
 always_ff @ (posedge clk) begin : cbc_mac_bookkeeping
     if(!rst_n) begin
         key_reg <= '0;
         message_reg <= '0;
+        test <= 1'b0;
     end else begin
-        if(start_i && current_state == IDLE) begin
+        if(start_i == 1'b1 && current_state == IDLE) begin
             key_reg <= key_i;
             message_reg <= message_i;
+            test <= ~test;
         end
 
         if(current_state == FIRST_HALF && data_out_valid) begin
@@ -56,8 +60,8 @@ end
 
 always_comb begin : cbc_mac_transitions
     next_state = current_state;
-    key = 'x;
-    message = 'x;
+    key = '0;
+    message = '0;
     data_in_valid = 1'b0;
     done_o = 1'b0;
 
@@ -67,8 +71,8 @@ always_comb begin : cbc_mac_transitions
         if(start_i) begin
             next_state = FIRST_HALF;
         end
-        key = 'x;
-        message = 'x;
+        key = '0;
+        message = '0;
         data_in_valid = 1'b0;
         done_o = 1'b0;
     end

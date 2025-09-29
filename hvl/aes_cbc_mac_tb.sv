@@ -53,12 +53,12 @@ module aes_cbc_mac_tb;
     typedef struct {
         logic [127:0] key;
         logic [255:0] message;
-        logic [127:0] mac;
+        logic [255:0] mac;
     } vector_t;
 
     // Queue to store all vectors loaded from the CSV file
     vector_t test_vectors[$];
-    string csv_filepath = "/groups/ece427-group1/ECE427_root/LeSCOPE/rtl/bin/aes_128_cbcmac_vectors.csv";
+    string csv_filepath = "/groups/ece427-group1/ECE427_root/LeSCOPE/rtl/bin/encryption_data.csv";
 
 
     initial begin
@@ -103,6 +103,7 @@ module aes_cbc_mac_tb;
             message_i = current_vector.message;
             start_i = 1'b1;
             @(posedge top_clk);
+            #1
             start_i = 1'b0;
             key_i = '0;
             message_i = '0;
