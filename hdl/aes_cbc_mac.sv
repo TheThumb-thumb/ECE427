@@ -19,14 +19,14 @@ module aes_cbc_mac #(
     output logic        done_o,                 // MAC calculation is complete
 
     // Data Ports
-    input  logic [127:0]                key_i,          // The 128-bit secret key
+    input  logic [(DATA_WIDTH/2)-1:0]   key_i,          // The 128-bit secret key
     input  logic [DATA_WIDTH-1:0]       message_i,      // 256-bit message
-    output logic [DATA_WIDTH-1:0]       mac_o           // The resulting MAC
+    output logic [DATA_WIDTH-1:0]   mac_o           // The resulting MAC
 );
 
 logic data_in_valid, data_out_valid;
-logic [127:0] key, key_reg, message, data_out;
-logic [255:0] message_reg;
+logic [(DATA_WIDTH/2)-1:0] key, key_reg, message, data_out;
+logic [DATA_WIDTH-1:0] message_reg;
 
 aes_cbc_mac_state_t current_state, next_state;
 
@@ -37,8 +37,6 @@ always_ff @ (posedge clk) begin : cbc_mac_states
     current_state <= next_state;
    end 
 end
-
-logic [127:0] first_half_register;
 
 always_ff @ (posedge clk) begin : cbc_mac_bookkeeping
     if(!rst_n) begin
@@ -51,7 +49,7 @@ always_ff @ (posedge clk) begin : cbc_mac_bookkeeping
         end
 
         if(current_state == FIRST_HALF && data_out_valid) begin
-            message_reg[127:0] <= data_out;
+            message_reg[(DATA_WIDTH/2)-1:0] <= data_out;
         end
     end
 end

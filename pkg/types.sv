@@ -53,5 +53,37 @@ package le_types;
         DONE
     } aes_cbc_mac_state_t;
 
+    typedef struct packed {
+        // BASIC IO PINS
+        logic [10:0] A;     // input | addresses A[0] = LSB
+        logic [31:0] D;     // input | data inputs D[0] = LSB
+        logic CEN;          // input | chip enable, active low
+        logic WEN;          // input | write enable, active low
+        logic CLK;          // input | clock
+        logic [31:0] Q;     // output | Data outputs Q[0] = LSB
+        // EXTRA MARGIN ADJUSTMENT PINS
+        logic [2:0] EMA;    // Extra margin adjustment pins EMA[0] = LSB
+        // BIST MUX PINS
+        logic TEN;          // input | test mode enable, active low 0 = Test operation and 1 = Normal operation
+        logic [10:0] TA;    // input | address test input
+        logic [10:0] AY;    // output | write enable mux output
+        logic [31:0] TD;    // input | test mode data inputs
+        logic [31:0] DY;    // output | data mux output
+        logic TCEN;         // input | chip enable test input, active low
+        logic CENY;         // output | chip enable mux output?
+        logic TWEN;         // input | write enable test inputs, active low
+        logic WENY;         // output | write enable mux output?
+        logic BEN;          // input | bypass mode enable, active low 0 = bypass operation and 1 = normal operation
+        logic [31:0] TQ;    // wtf?
+        // PIPELINE SUPPORT PINS
+        logic TPEN;         // input | pipeline test mode enable
+        logic PEN;          // input | pipeline enable, active low
+        logic PENY;         // output | output of pipeline enable register for scan testing
+        logic [31:0] QI;    // output | non-pipelined memory outputs
+        //POWER DOWN MODE PINS
+        logic RETN;         // input | retention mode enable, active low
+
+    } sram_sp_reg_t;
+
 
 endpackage: le_types
