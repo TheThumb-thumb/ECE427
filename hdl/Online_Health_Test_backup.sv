@@ -6,9 +6,9 @@ import params::*;
     input logic adc_in, // data value from entropy source
     input logic clk,
     input logic rst,
+    input logic deque, // Should only deque if good_entropy_out is high because that means we have 1024 samples stored and they are within 45-55% range
     input logic debug_mode,
     input logic [7:0] spi_reg_lsb,
-    input logic full,
 
     output logic perm_fail,
     output logic valid,
@@ -18,46 +18,40 @@ import params::*;
 
 );
 
-logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter, sample_cnt;
-logic [C_PERM-1:0] buff_reg;
-logic rep_fail, adaptive_fail, calibration_pass;
+logic [$clog2(SAMPLE_SIZE)-1:0] noise_counter;
+logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter;
+logic [SAMPLE_SIZE-1:0] buff_reg;
+logic [1:0] enque_counter;
+logic enque, rep_fail, adaptive_fail, calibration_pass;
 logic [7:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_curr, calibration_arr_p_next, lsb_reg, lsb_reg_next;
 logic good_entropy_out;
-logic inter_fail;
-logic window;
-logic flag;
+logic enq_flag, enq_flag_next;
+logic calib_flag, calib_flag_next;
+logic inter_fail
 
-always_ff @( posedge clk ) begin
-    if (rst) begin
-        flag <= '0;
-    end else if (sample_cnt[5]) begin
-        flag <= 1'b1;
-    end else begin
-        // do nothing
-    end
-end
+// logic inter_fail_reg, inter_fail_next;
 
 assign perm_fail = rep_fail && adaptive_fail;
 
-always_comb begin
+assign enque = enq_flag && !enq_flag_next;
 
-    inter_fail = '0;
-    rep_fail = '0;
-    calibration_pass = '0;
-    if (flag) begin
-        calibration_pass = '1;
-        if (buff_reg[C_INTER-1:0] == '1 || buff_reg[C_INTER-1:0] == '0) begin
-            inter_fail = '1;
-            calibration_pass = 1'b0;
-        end
-        if (buff_reg[C_PERM-2:0] == '1 || buff_reg[C_PERM-2:0] == '0) begin
-            rep_fail = '1;
-            calibration_pass = 1'b0;
-        end
-    end else begin
-        calibration_pass = '1;
-    end
-end
+// que fifo (
+
+//     .clk(clk),
+//     .rst(rst),
+//     .inter_fail(inter_fail),
+//     .perm_fail(perm_fail),
+
+//     .wdata(buff_reg),
+//     .rdata(checked_noise),
+
+//     .enque(enque),
+//     .deque(deque),
+
+//     .full(full),
+//     .empty(empty)
+
+// );
 
 always_ff @(posedge clk) begin
     if (rst) begin
@@ -69,25 +63,40 @@ always_ff @(posedge clk) begin
     end
 end
 
-always_ff @( posedge clk ) begin
+always_ff @(posedge clk) begin
     if (rst) begin
-        window <= '0;
-    end else if (sample_cnt == 1023) begin
-        window <= 1'b1;
+        calib_flag <= '0;
+        calib_flag_next <= '0;
+    end else if (enque && enque_counter == 2'b11 && calib_flag == 0) begin
+        calib_flag_next <= '1;                      
     end else begin
-        window <= window;
+        calib_flag <= calib_flag_next;
+        calib_flag_next <= '0;
     end
 end
 
 always_ff @(posedge clk) begin
     if (rst) begin
-        sample_cnt <= '0;
-    end else if (inter_fail || perm_fail) begin
-        sample_cnt <= '0;
-    end else if (!full) begin
-        sample_cnt <= sample_cnt + 1;
+        enq_flag <= '0;
+        enq_flag_next <= '0;
+    end else if (!full && (noise_counter == 255) && !inter_fail && !perm_fail)begin
+        enq_flag_next <= '1;
     end else begin
         // do nothing
+        enq_flag <= enq_flag_next;
+        enq_flag_next <= '0;
+    end
+
+end
+
+always_ff @(posedge clk) begin
+    if (rst) begin
+        enque_counter <= '0;
+    end else if (inter_fail || perm_fail) begin
+        enque_counter <= '0;
+    end else if (enque) begin
+        enque_counter <= enque_counter + 1;
+    end else begin
     end
 end
 
@@ -96,7 +105,7 @@ always_ff @(posedge clk) begin
         entropy_counter <= '0;
     end else if(inter_fail || rep_fail || adaptive_fail || entropy_counter == 1023) begin
         entropy_counter <= '0;
-    end else if (adc_in == 1'b1 && !full) begin
+    end else if (adc_in == 1'b1) begin
         entropy_counter <= entropy_counter + 1;
     end else begin
 
@@ -107,12 +116,33 @@ always_ff @(posedge clk) begin
 
     if (rst) begin
         buff_reg <= 'x;
-    end else if (!full) begin
-        buff_reg <= {buff_reg[C_PERM-2:0], adc_in};
+        noise_counter <= '0;
     end else begin
-        // do nothing
+        noise_counter <= noise_counter + 1;
+        buff_reg <= {buff_reg[SAMPLE_SIZE-2:0], adc_in};
     end
 end
+
+always_comb begin
+
+    inter_fail = '0;
+    rep_fail = '0;
+    calibration_pass = '0;
+    if (noise_counter[5:0] == 31) begin
+        calibration_pass = '1;
+        if (buff_reg[C_INTER-1:0] == '1 || buff_reg[C_INTER-1:0] == '0) begin
+            inter_fail = '1;
+            calibration_pass = 1'b0;
+        end
+        if (buff_reg[C_PERM-1:0] == '1 || buff_reg[C_PERM-1:0] == '0) begin
+            rep_fail = '1;
+            calibration_pass = 1'b0;
+        end
+    end else begin
+        calibration_pass = '1;
+    end
+end
+
 
 assign calibration_arr_n = calibration_arr_n_curr;
 assign calibration_arr_p = calibration_arr_p_curr;
@@ -147,16 +177,16 @@ always_comb begin
     calibration_arr_n_next = calibration_arr_n_curr;
     calibration_arr_p_next = calibration_arr_p_curr;
     lsb_reg_next = lsb_reg;
-    if ((calibration_arr_n_curr == '0 || calibration_arr_p_curr == '0) && inter_fail && !full) begin
+    if ((calibration_arr_n_curr == '0 || calibration_arr_p_curr == '0) && inter_fail) begin
         adaptive_fail = '1;
-    end else if (inter_fail && !full) begin
+    end else if (inter_fail) begin
         if (buff_reg[C_INTER-1:0] == '1) begin
             calibration_arr_p_next = calibration_arr_p_curr - 2'b11;
         end
         if (buff_reg[C_INTER-1:0] == '0) begin
             calibration_arr_n_next = calibration_arr_n_curr - 2'b11;
         end
-    end else if ((calibration_pass && window) || inter_fail && !full) begin
+    end else if ((calibration_pass && calib_flag) || inter_fail) begin
 
             if (entropy_counter < 128 && entropy_counter >= 0) begin                // 0-12.5
                 if (calibration_arr_p_curr != '1) begin
@@ -209,9 +239,7 @@ always_comb begin
                     lsb_reg_next = 8'h03;
                 end
 
-    end else begin
-        // do nothing
+        end
     end
-end
 
 endmodule

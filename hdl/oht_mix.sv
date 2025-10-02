@@ -1,15 +1,14 @@
 //systemVerilog HDL for "strongARM", "OHT" "systemVerilog"
 
 localparam IV_WIDTH = 80;
-    localparam SETUP_TIME = 1151; // Cycles needed for trivium to cycle through internal state 4 times = 4 x 288 = 1152
-    localparam ADC_FIF0_DEPTH = 80;
-    localparam ENTROPY_SAMPLE = 1024;   
-    localparam ENTROPY_CUTOFF = 588;
-    localparam SAMPLE_SIZE = 256;   
-    localparam C_INTER = 22;
-    localparam C_PERM = 32;
-    localparam OUTREG_MAX_WIDTH = 64;
-
+localparam SETUP_TIME = 1151; // Cycles needed for trivium to cycle through internal state 4 times = 4 x 288 = 1152
+localparam ADC_FIF0_DEPTH = 80;
+localparam ENTROPY_SAMPLE = 1024;   
+localparam ENTROPY_CUTOFF = 588;
+localparam SAMPLE_SIZE = 256;   
+localparam C_INTER = 22;
+localparam C_PERM = 32;
+localparam OUTREG_MAX_WIDTH = 64;
 
 module OHT
 (

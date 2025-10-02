@@ -8,10 +8,20 @@ package params;
     localparam C_INTER = 22;
     localparam C_PERM = 32;
     localparam OUTREG_MAX_WIDTH = 64;
+    localparam DATA_WIDTH = 256;
 
 endpackage : params
 
 package le_types;
+
+    typedef enum logic [2:0] {
+        RDSEED_16 = 3'd0,
+        RDRAND_16 = 3'd1,
+        RDSEED_32 = 3'd2,
+        RDRAND_32 = 3'd3,
+        RDSEED_64 = 3'd4,
+        RDRAND_64 = 3'd5
+    } rand_req_t;
 
     typedef enum logic [1:0] {
         idle = 2'b00,

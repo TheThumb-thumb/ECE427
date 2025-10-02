@@ -355,7 +355,7 @@ always_comb begin
             end
         end
 
-        // on god 
+        // on god dis broken
         S_UPDATE_AFTER_MIX: begin
             logic [DATA_WIDTH-1:0] temp_cat;
             temp_cat = {temp0_reg, temp1_reg} ^ provided_data_reg;

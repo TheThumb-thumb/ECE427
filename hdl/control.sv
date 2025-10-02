@@ -64,22 +64,22 @@ module control (
     input logic temp_sense_2_good,
     input logic temp_sense_3_good,
 
-    output logic [23:0] curr_state,
+    output logic [24:0] curr_state,
     output logic        spi_data_ready
 
 
 );
 
-    logic [24:0] next_state; // Internally track next state
+    logic [23:0] next_state; // Internally track next state
 
     // ------------------ Registers ------------------
 
     // State constants
-    localparam [23:0] DEFAULT_STATE = 24'b 0000_0001_0000_0000_0000_0000; // Output pin 2 is clk, output pin 1 is VCC. Maybe idk yet
-    localparam [23:0] HALT_STATE    = 24'd1; // We just don't want to output anything
+    localparam [24:0] DEFAULT_STATE = 25'b 0_0000_0000_0000_0000_0000_0000; // Output pin 2 is clk, output pin 1 is VCC. Maybe idk yet
+    localparam [24:0] HALT_STATE    = 25'hDEDBEF; // We just don't want to output anything
 
 
-    logic [23:0] debug_state; //0x02
+    logic [24:0] debug_state; //0x02
 
     logic [7:0]  internal_calibration_step;
     logic [15:0] internal_entropy_calibration;
@@ -102,15 +102,18 @@ module control (
         internal_temp_counter_3 = temp_counter_3;
     end
 
+    // Debug state
+    logic write_debug_state;
+    logic [24:0] new_debug_state_value;
+
     // SPI stuff
     logic [24:0] data_to_send;
     logic send_trigger;
     logic [24:0] spi_data;
-    logic send_trigger;
 
     // Instantiate SPI module
     spi spi_inst (
-        .sclk(debug_clk),
+        .sclk(clk),
         .rst_n(rst_n),
         .data_to_send(data_to_send),
         .send_trigger(send_trigger),
@@ -125,6 +128,34 @@ module control (
 
     // ---------------------------------------------------------
 
+    // Clock Mux and State Update
+    assign clk = debug ? debug_clk : ic_clk;
+
+    always_comb begin : state_logic
+        if (!temp_sense_0_good || !temp_sense_1_good || !temp_sense_2_good || !temp_sense_3_good)
+            next_state = HALT_STATE;
+        else if (debug)
+            next_state = debug_state;
+        else
+            next_state = DEFAULT_STATE;
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin : state_register
+        if (!rst_n) begin
+            curr_state <= DEFAULT_STATE;
+        end else
+            curr_state <= next_state;
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin : debug_state_control
+        if (!rst_n)
+            debug_state <= DEFAULT_STATE;
+        else if (write_debug_state)
+            debug_state <= new_debug_state_value;
+    end
+
+    
+
 
     // SPI Data Processing - Combinational Logic
     always_comb begin : spi_data_processing
@@ -132,7 +163,7 @@ module control (
         send_trigger = 1'b0;
         data_to_send = 25'h0;
 
-        if (spi_data_ready) begin
+        if (spi_data_ready && debug) begin
             // Bit 25: 1=Register Operation (Read/Write), 0=Mux Select Operation
             if (spi_data[24]) begin 
                 // Bit 24: 1=Read Operation, 0=Write Operation
@@ -172,112 +203,111 @@ module control (
             end
             
             else begin // Mux Select Operation (Set Debug State)
-                debug_state = spi_data[23:0]; 
+                write_debug_state = 1'b1;
+                new_debug_state_value = spi_data[24:0];
             end
         end
     end
    
-    // Clock Mux and State Update
-    assign clk = debug ? debug_clk : ic_clk;
-    always_ff @(posedge clk or negedge rst_n) begin : state_register
-        if (!rst_n) begin
-            curr_state <= DEFAULT_STATE;
-        end else begin
-            curr_state <= next_state;
-        end
-    end
+
 
 
     // --- Output Pin Muxes ---
 
     // Output Pin 2 Mux (Combinational)
     always_comb begin : output_pin_2_mux
-        output_pin_2 = 1'b0; // Default value (Low)
+        if (debug) begin
+            output_pin_2 = 1'b0; // Default value (Low)
 
-        case (curr_state[23:21]) // Module Select (M)
-            3'd0: begin // M=0: Fixed Signals & Status
-                case (curr_state[20:16]) // Cell Select (C)
-                    5'd0: output_pin_2 = 1'b1;
-                    5'd1: output_pin_2 = clk;
-                    5'd2: output_pin_2 = conditioner_mux_output;
-                    5'd3: output_pin_2 = DRBG_mux_output;
-                    5'd4: output_pin_2 = DRBG_mux_output; // Duplicate mapping, kept as-is
-                    5'd5: output_pin_2 = temp_sense_0_good;
-                    5'd6: output_pin_2 = temp_sense_1_good;
-                    5'd7: output_pin_2 = temp_sense_2_good;
-                    5'd8: output_pin_2 = temp_sense_3_good;
-                    default: output_pin_2 = 1'b0; 
-                endcase
-            end
-            3'd1: output_pin_2 = latch_entropy_mux_out;   // M=1: Latch Entropy MUX Output
-            3'd2: output_pin_2 = jitter_entropy_mux_out;  // M=2: Jitter Entropy MUX Output
-            3'd3: output_pin_2 = latch_oht_mux_out;       // M=3: Latch OHT MUX Output
-            3'd4: output_pin_2 = jitter_oht_mux_out;      // M=4: Jitter OHT MUX Output
-            3'd5: output_pin_2 = latch_sram_mux_out;      // M=5: Latch SRAM Output
-            3'd6: output_pin_2 = jitter_sram_mux_out;     // M=6: Jitter SRAM Output
-            default: output_pin_2 = 1'b0;
-        endcase
+            case (curr_state[23:21]) // Module Select (M)
+                3'd0: begin // M=0: Fixed Signals & Status
+                    case (curr_state[20:16]) // Cell Select (C)
+                        5'd0: output_pin_2 = 1'b1;
+                        5'd1: output_pin_2 = clk;
+                        5'd2: output_pin_2 = conditioner_mux_output;
+                        5'd3: output_pin_2 = DRBG_mux_output;
+                        5'd4: output_pin_2 = DRBG_mux_output; // Duplicate mapping, kept as-is
+                        5'd5: output_pin_2 = temp_sense_0_good;
+                        5'd6: output_pin_2 = temp_sense_1_good;
+                        5'd7: output_pin_2 = temp_sense_2_good;
+                        5'd8: output_pin_2 = temp_sense_3_good;
+                        default: output_pin_2 = 1'b0; 
+                    endcase
+                end
+                3'd1: output_pin_2 = latch_entropy_mux_out;   // M=1: Latch Entropy MUX Output
+                3'd2: output_pin_2 = jitter_entropy_mux_out;  // M=2: Jitter Entropy MUX Output
+                3'd3: output_pin_2 = latch_oht_mux_out;       // M=3: Latch OHT MUX Output
+                3'd4: output_pin_2 = jitter_oht_mux_out;      // M=4: Jitter OHT MUX Output
+                3'd5: output_pin_2 = latch_sram_mux_out;      // M=5: Latch SRAM Output
+                3'd6: output_pin_2 = jitter_sram_mux_out;     // M=6: Jitter SRAM Output
+                default: output_pin_2 = 1'b0;
+            endcase
+        end
     end
 
     // Output Pin 1 Mux (Combinational)
     always_comb begin : output_pin_1_mux
-        output_pin_1 = 1'b0; // Default value (Low)
+        if (debug) begin
+            output_pin_1 = 1'b0; // Default value (Low)
 
-        case (curr_state[15:13]) // Module Select (M)
-            3'd0: begin // M=0: Fixed Signals & Status
-                case (curr_state[12:8]) // Cell Select (C)
-                    5'd0: output_pin_1 = 1'b1;
-                    5'd1: output_pin_1 = clk;
-                    5'd2: output_pin_1 = conditioner_mux_output;
-                    5'd3: output_pin_1 = DRBG_mux_output;
-                    5'd4: output_pin_1 = DRBG_mux_output; // Duplicate mapping, kept as-is
-                    5'd5: output_pin_1 = temp_sense_0_good;
-                    5'd6: output_pin_1 = temp_sense_1_good;
-                    5'd7: output_pin_1 = temp_sense_2_good;
-                    5'd8: output_pin_1 = temp_sense_3_good;
-                    default: output_pin_1 = 1'b0; 
-                endcase
-            end
-            3'd1: output_pin_1 = latch_entropy_mux_out;  // M=1: Latch Entropy MUX Output
-            3'd2: output_pin_1 = jitter_entropy_mux_out; // M=2: Jitter Entropy MUX Output
-            3'd3: output_pin_1 = latch_oht_mux_out;      // M=3: Latch OHT MUX Output
-            3'd4: output_pin_1 = jitter_oht_mux_out;     // M=4: Jitter OHT MUX Output
-            3'd5: output_pin_1 = latch_sram_mux_out;     // M=5: Latch OHT SRAM Output
-            3'd6: output_pin_1 = jitter_sram_mux_out;    // M=6: Jitter OHT SRAM Output
-            default: output_pin_1 = 1'b0;
-        endcase
+            case (curr_state[15:13]) // Module Select (M)
+                3'd0: begin // M=0: Fixed Signals & Status
+                    case (curr_state[12:8]) // Cell Select (C)
+                        5'd0: output_pin_1 = 1'b1;
+                        5'd1: output_pin_1 = clk;
+                        5'd2: output_pin_1 = conditioner_mux_output;
+                        5'd3: output_pin_1 = DRBG_mux_output;
+                        5'd4: output_pin_1 = DRBG_mux_output; // Duplicate mapping, kept as-is
+                        5'd5: output_pin_1 = temp_sense_0_good;
+                        5'd6: output_pin_1 = temp_sense_1_good;
+                        5'd7: output_pin_1 = temp_sense_2_good;
+                        5'd8: output_pin_1 = temp_sense_3_good;
+                        default: output_pin_1 = 1'b0; 
+                    endcase
+                end
+                3'd1: output_pin_1 = latch_entropy_mux_out;  // M=1: Latch Entropy MUX Output
+                3'd2: output_pin_1 = jitter_entropy_mux_out; // M=2: Jitter Entropy MUX Output
+                3'd3: output_pin_1 = latch_oht_mux_out;      // M=3: Latch OHT MUX Output
+                3'd4: output_pin_1 = jitter_oht_mux_out;     // M=4: Jitter OHT MUX Output
+                3'd5: output_pin_1 = latch_sram_mux_out;     // M=5: Latch OHT SRAM Output
+                3'd6: output_pin_1 = jitter_sram_mux_out;    // M=6: Jitter OHT SRAM Output
+                default: output_pin_1 = 1'b0;
+            endcase
+        end
     end
     
 
     always_comb begin: input_mux
-        case (curr_state[7:5])
-            // 3'b000: begin
-            //     case (curr_state[4:0])
-            //         5'd0, 5'd1, 5'd2: begin
-            //             case (spi_data)
-            //                 5'b00001: input_pin_1 = output_pin_1;
-            //                 5'b00010: input_pin_1 = output_pin_2;
-            //                 default: ; // no assignment
-            //             endcase
-            //         end
-            //         default: ; // do nothing
-            //     endcase
-            // end
+        if (debug) begin
+            case (curr_state[7:5])
+                // 3'b000: begin
+                //     case (curr_state[4:0])
+                //         5'd0, 5'd1, 5'd2: begin
+                //             case (spi_data)
+                //                 5'b00001: input_pin_1 = output_pin_1;
+                //                 5'b00010: input_pin_1 = output_pin_2;
+                //                 default: ; // no assignment
+                //             endcase
+                //         end
+                //         default: ; // do nothing
+                //     endcase
+                // end
 
-            3'b001: latch_oht_mux_in = input_pin_1;
-            3'b010: jitter_oht_mux_in = input_pin_1;
-            3'b011: latch_sram_mux_in = input_pin_1;
-            3'b100: jitter_sram_mux_in = input_pin_1;
-            // 3'b101: begin
-            //     case (curr_state[4:0])
-            //         5'b00000: conditioner_mux_input = input_pin_1;
-            //         5'b00001: DRBG_mux_input = input_pin_1;
-            //         default: ; // do nothing
-            //     endcase
-            // end
+                3'b001: latch_oht_mux_in = input_pin_1;
+                3'b010: jitter_oht_mux_in = input_pin_1;
+                3'b011: latch_sram_mux_in = input_pin_1;
+                3'b100: jitter_sram_mux_in = input_pin_1;
+                // 3'b101: begin
+                //     case (curr_state[4:0])
+                //         5'b00000: conditioner_mux_input = input_pin_1;
+                //         5'b00001: DRBG_mux_input = input_pin_1;
+                //         default: ; // do nothing
+                //     endcase
+                // end
 
-            default: ; // do nothing
-        endcase
+                default: ; // do nothing
+            endcase
+        end
     end
 
 endmodule

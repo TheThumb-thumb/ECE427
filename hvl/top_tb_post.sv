@@ -1,4 +1,4 @@
-module top_tb;
+module top_tb_post;
 
 	logic top_clk;
 	logic top_reset;

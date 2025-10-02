@@ -1,9 +1,8 @@
 /**
- * AES-CBC-MAC Conditioner Top-Level Module
+ * AES-CBC-MAC Module
  *
  * Generates a 256-bit Message Authentication Code (MAC) for a given
- * message and key using the AES-CBC-MAC algorithm. Will be used for
- * entropy conditioning as per NIST 800-90B whitepaper
+ * message and key using the AES-CBC-MAC algorithm. 
  *
  */
 import le_types::*;
