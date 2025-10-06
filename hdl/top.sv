@@ -7,6 +7,7 @@
 //
 //======================================================================
 import le_types::*;
+import params::*;
 module top (
     // PHYSICAL PINS
 
@@ -31,7 +32,12 @@ module top (
     // Serial I/O for debug
     output logic output_pin_2,
     output logic output_pin_1,
-    input logic input_pin_1
+    input logic input_pin_1,
+
+    //Temp pins for verification (no output buffer)
+    output logic [256:0] temp_seed_out,
+    output logic [127:0] temp_drbg_out,
+    output logic temp_out_valid
 
 );
 
@@ -40,16 +46,19 @@ module top (
     //------------------------------------------------------------------
 
     //Connections between OHT and Conditioner
-    logic cond_start;
+    logic oht_cond_valid, oht_cond_ready;
     logic [DATA_WIDTH-1:0] message;
-    logic [(DATA_WIDTH-1)-1:0] key;
+    logic [(DATA_WIDTH/2)-1:0] key;
 
     //Connections between Conditioner and DRBG
-    logic cond_done;
+    logic cond_drbg_valid, cond_drbg_ready;
     logic [DATA_WIDTH-1:0] seed;
 
-    //Connections between Conditioner, DRBG and Output Buffer
+    //Connections between Conditioner and Output Buffer
+    logic cond_output_valid, cond_output_ready;
 
+    //Connections between DRBG and Output Buffer
+    logic drbg_output_valid, drbg_output_ready;
 
     // Wires to connect control to other modules
     logic        clk;
@@ -103,9 +112,7 @@ module top (
         .jitter_sram_mux_out(jitter_sram_mux_out),  // Serial debug output from selected jitter SRAM address
         .latch_sram_mux_in(latch_sram_mux_in), // Serial debug input to selected latch SRAM address
         .jitter_sram_mux_in(jitter_sram_mux_in),  // Serial debug input to selected jitter SRAM address
-        .conditioner_mux_output(conditioner_mux_output),  // Serial debug output from selected conditioner
         .conditioner_mux_input(conditioner_mux_input), // Serial debug input to selected conditioner
-        .DRBG_mux_output(DRBG_mux_output),  // Serial debug output from selected DRBG
         .DRBG_mux_input(DRBG_mux_input), // Serial debug input to selected DRBG
         .temp_counter_0(temp_counter_0),  // Counters for temp sensors
         .temp_counter_1(temp_counter_1),
@@ -221,54 +228,66 @@ module top (
     // Instantiate the OHT
 
 
-    // Instantiate the AES_CBC_MAC Conditioner
+    // Instantiate the Conditioner
 
     conditioner #(
         .DATA_WIDTH(256)
     ) conditioner_0  (
+        //System signals
         .clk(clk),
         .rst_n(rst_n),
 
-        .start_i(cond_start),
-        .done_o(cond_done),   
+        //Handshake signals
+        .oht_valid_i(oht_cond_valid),
+        .oht_ready_o(oht_cond_ready),
 
+        .drbg_ready_i(cond_drbg_ready),
+        .drbg_valid_o(cond_drbg_valid),
+
+        .rdseed_ready_i(cond_output_ready),
+        .rdseed_valid_o(cond_output_valid),
+
+        //Data ports
         .key_i(key),
         .message_i(message),
-        .mac_o(seed),
+        .seed_o(seed),
 
+        //Debug control signals and data ports
         .debug(debug),
         .serial_input(conditioner_mux_input),
         .debug_register(curr_state[7:0])
     );
 
 
+    //Instantiate the DRBG
+    aes_ctr_drbg #(
+        .KEY_BITS(128),
+        .BLOCK_BITS(128),
+        .SEED_BITS(256),
+        .RESEED_INTERVAL(511)
+    ) drbg_0 (
+        .clk(clk), 
+        .rst_n(rst_n),
 
-    // Instantiate the AES_CTR DRBG
-    // aes_ctr_drbg #(
-    //     .DATA_WIDTH(256),
-    //     .KEY_BITS(128),
-    //     .MAX_BTW_RESEEDS(511)
-    // ) drbg_0 (
-    //     .clk(clk), 
-    //     .rst_n(rst_n),
+        .instantiate_i(),
+        .reseed_i(),
+        .generate_i(),
+        .num_blocks_i(),
 
-    //     .instantiate_i(),
-    //     .reseed_i(),
-    //     .generate_i(),
-    //     .num_blocks_i(),
+        .seed_material_i(seed),
+        .seed_valid_i(cond_drbg_valid),
 
-    //     .entropy_i(),
-    //     .nonce_i(),
-    //     .personalization_i(),
-    //     .additional_input_i(),
+        .additional_input_i(),
 
-    //     .k_df_i(),
+        .busy_o(),
+        .done_o(),
+        .random_valid_o(drbg_output_valid),
+        .random_block_o(temp_drbg_out)
+    );
 
-    //     .busy_o(),
-    //     .done_o(),
-    //     .random_valid_o(),
-    //     .random_block_o()
-    // );
-
+    // temp signals pretending to be the buffer
+    assign cond_output_ready = 1'b1;
+    assign temp_out_valid = cond_output_valid || drbg_output_valid;
+    assign temp_seed_out = seed;
 
 endmodule

@@ -11,11 +11,15 @@ module control (
     output logic output_pin_2,
     output logic output_pin_1,
     input logic input_pin_1,
+    input logic output_to_input_direct, // If this pin is high, connect output 1 to input 1 internally.
+    output logic spi_data_ready,
+
 
     //  ------------- NEED THE IO WITH CPU -----------------
 
     // INTERNAL CLOCK CONNECTION  
     output logic clk, // This is muxed between ic_clk and debug_clk
+    
 
     // ENTROPY SOURCE CONNECTIONS
     input logic latch_entropy_mux_out, // Direct connection to latch entropy output. Index of entropy source detemined by cell select bits
@@ -41,12 +45,10 @@ module control (
     output logic jitter_sram_mux_in, // Input to Jitter SRAM
 
     // AES CBC MAC CONNECTIONS
-    input conditioner_mux_output, // Output of the conditioner MUX
-    output conditioner_mux_input, // Input to MUX into the conditioner
+    output logic conditioner_mux_input, // Input to MUX into the conditioner
 
     // DRBG CONNECTIONS
-    input DRBG_mux_output, // Output of DRBG
-    output DRBG_mux_input, // Input to DRBG
+    output logic DRBG_mux_input, // Input to DRBG
 
     // TEMPERATURE SENSOR CONNECTIONS (this might change depending on Anthony's counter implementation)
     input logic [13:0] temp_counter_0, // Temp sensor 0 counter 
@@ -64,10 +66,7 @@ module control (
     input logic temp_sense_2_good,
     input logic temp_sense_3_good,
 
-    output logic [24:0] curr_state,
-    output logic        spi_data_ready
-
-
+    output logic [24:0] curr_state
 );
 
     logic [23:0] next_state; // Internally track next state
@@ -95,12 +94,17 @@ module control (
     logic [13:0] internal_temp_counter_3; // Temp sensor 3 counter, 0x0C
     
     // Temp counters are read-only, so update them asynchronously
-    always_comb begin
-        internal_temp_counter_0 = temp_counter_0;
-        internal_temp_counter_1 = temp_counter_1;
-        internal_temp_counter_2 = temp_counter_2;
-        internal_temp_counter_3 = temp_counter_3;
+    always_latch begin
+        if (clk) begin
+            internal_temp_counter_0 = temp_counter_0;
+            internal_temp_counter_1 = temp_counter_1;
+            internal_temp_counter_2 = temp_counter_2;
+            internal_temp_counter_3 = temp_counter_3;
+        end
     end
+
+    // This signal is muxed between input_pin_1 and output_pin_2
+    logic input_bypass_mux_out;
 
     // Debug state
     logic write_debug_state;
@@ -140,21 +144,17 @@ module control (
             next_state = DEFAULT_STATE;
     end
 
+    always_comb begin
+        if (write_debug_state)
+            debug_state = new_debug_state_value;
+    end
+
     always_ff @(posedge clk or negedge rst_n) begin : state_register
         if (!rst_n) begin
             curr_state <= DEFAULT_STATE;
         end else
             curr_state <= next_state;
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin : debug_state_control
-        if (!rst_n)
-            debug_state <= DEFAULT_STATE;
-        else if (write_debug_state)
-            debug_state <= new_debug_state_value;
-    end
-
-    
+    end 
 
 
     // SPI Data Processing - Combinational Logic
@@ -166,6 +166,7 @@ module control (
         if (spi_data_ready && debug) begin
             // Bit 25: 1=Register Operation (Read/Write), 0=Mux Select Operation
             if (spi_data[24]) begin 
+                write_debug_state = 1'b0;
                 // Bit 24: 1=Read Operation, 0=Write Operation
                 if (spi_data[23]) begin // Read operation 
                     send_trigger = 1'b1; // Flag to send data back
@@ -183,6 +184,7 @@ module control (
                         4'hA: data_to_send = {10'h0, internal_temp_counter_1}; // Temp sensor 1 counter (read-only)
                         4'hB: data_to_send = {10'h0, internal_temp_counter_2}; // Temp sensor 2 counter (read-only)
                         4'hC: data_to_send = {10'h0, internal_temp_counter_3}; // Temp sensor 3 counter (read-only)
+                        4'hD: ; // Do nothing here, but this is a placeholder for when we want the OHT to use the calibration register value
                         default: data_to_send = 25'hDED_BEF; // Invalid Address
                     endcase
                 end
@@ -216,6 +218,7 @@ module control (
 
     // Output Pin 2 Mux (Combinational)
     always_comb begin : output_pin_2_mux
+
         if (debug) begin
             output_pin_2 = 1'b0; // Default value (Low)
 
@@ -224,13 +227,10 @@ module control (
                     case (curr_state[20:16]) // Cell Select (C)
                         5'd0: output_pin_2 = 1'b1;
                         5'd1: output_pin_2 = clk;
-                        5'd2: output_pin_2 = conditioner_mux_output;
-                        5'd3: output_pin_2 = DRBG_mux_output;
-                        5'd4: output_pin_2 = DRBG_mux_output; // Duplicate mapping, kept as-is
-                        5'd5: output_pin_2 = temp_sense_0_good;
-                        5'd6: output_pin_2 = temp_sense_1_good;
-                        5'd7: output_pin_2 = temp_sense_2_good;
-                        5'd8: output_pin_2 = temp_sense_3_good;
+                        5'd2: output_pin_2 = temp_sense_0_good;
+                        5'd3: output_pin_2 = temp_sense_1_good;
+                        5'd4: output_pin_2 = temp_sense_2_good;
+                        5'd5: output_pin_2 = temp_sense_3_good;
                         default: output_pin_2 = 1'b0; 
                     endcase
                 end
@@ -243,6 +243,7 @@ module control (
                 default: output_pin_2 = 1'b0;
             endcase
         end
+        else output_pin_2 = 1'b0;
     end
 
     // Output Pin 1 Mux (Combinational)
@@ -255,13 +256,10 @@ module control (
                     case (curr_state[12:8]) // Cell Select (C)
                         5'd0: output_pin_1 = 1'b1;
                         5'd1: output_pin_1 = clk;
-                        5'd2: output_pin_1 = conditioner_mux_output;
-                        5'd3: output_pin_1 = DRBG_mux_output;
-                        5'd4: output_pin_1 = DRBG_mux_output; // Duplicate mapping, kept as-is
-                        5'd5: output_pin_1 = temp_sense_0_good;
-                        5'd6: output_pin_1 = temp_sense_1_good;
-                        5'd7: output_pin_1 = temp_sense_2_good;
-                        5'd8: output_pin_1 = temp_sense_3_good;
+                        5'd2: output_pin_1 = temp_sense_0_good;
+                        5'd3: output_pin_1 = temp_sense_1_good;
+                        5'd4: output_pin_1 = temp_sense_2_good;
+                        5'd5: output_pin_1 = temp_sense_3_good;
                         default: output_pin_1 = 1'b0; 
                     endcase
                 end
@@ -274,36 +272,32 @@ module control (
                 default: output_pin_1 = 1'b0;
             endcase
         end
+        else output_pin_1 = 1'b0;
+    end
+
+    always_comb begin: input_bypass_mux
+        if (output_to_input_direct)
+            input_bypass_mux_out = output_pin_2;
+        else
+            input_bypass_mux_out = input_pin_1;
     end
     
 
     always_comb begin: input_mux
         if (debug) begin
             case (curr_state[7:5])
-                // 3'b000: begin
-                //     case (curr_state[4:0])
-                //         5'd0, 5'd1, 5'd2: begin
-                //             case (spi_data)
-                //                 5'b00001: input_pin_1 = output_pin_1;
-                //                 5'b00010: input_pin_1 = output_pin_2;
-                //                 default: ; // no assignment
-                //             endcase
-                //         end
-                //         default: ; // do nothing
-                //     endcase
-                // end
 
                 3'b001: latch_oht_mux_in = input_pin_1;
                 3'b010: jitter_oht_mux_in = input_pin_1;
                 3'b011: latch_sram_mux_in = input_pin_1;
                 3'b100: jitter_sram_mux_in = input_pin_1;
-                // 3'b101: begin
-                //     case (curr_state[4:0])
-                //         5'b00000: conditioner_mux_input = input_pin_1;
-                //         5'b00001: DRBG_mux_input = input_pin_1;
-                //         default: ; // do nothing
-                //     endcase
-                // end
+                3'b101: begin
+                    case (curr_state[4:0])
+                        5'b00000: conditioner_mux_input = input_pin_1;
+                        5'b00001: DRBG_mux_input = input_pin_1;
+                        default: ; // do nothing
+                    endcase
+                end
 
                 default: ; // do nothing
             endcase

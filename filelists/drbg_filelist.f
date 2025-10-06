@@ -1,4 +1,4 @@
-+incdir+$TOP_DIR/hdl
++incdir+$TOP_DIR/pkg
 $TOP_DIR/hdl/aes_core.sv
 $TOP_DIR/hdl/aes_sbox.sv
 $TOP_DIR/hdl/aes_round.sv

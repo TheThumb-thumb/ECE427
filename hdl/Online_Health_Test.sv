@@ -7,7 +7,7 @@ import params::*;
     input logic clk,
     input logic rst,
     input logic debug_mode,
-    input logic [7:0] spi_reg_lsb,
+    input logic [15:0] spi_reg_lsb,
     input logic full,
 
     output logic perm_fail,
@@ -15,17 +15,17 @@ import params::*;
     // outputs for controlling entropy source calibration
     output logic [7:0] calibration_arr_n,   // controls the number of 0s
     output logic [7:0] calibration_arr_p    // controls the number of 1s
-
 );
 
 logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter, sample_cnt;
 logic [C_PERM-1:0] buff_reg;
 logic rep_fail, adaptive_fail, calibration_pass;
-logic [7:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_curr, calibration_arr_p_next, lsb_reg, lsb_reg_next;
+logic [7:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_curr, calibration_arr_p_next;
 logic good_entropy_out;
 logic inter_fail;
 logic window;
 logic flag;
+
 
 always_ff @( posedge clk ) begin
     if (rst) begin
@@ -114,6 +114,9 @@ always_ff @(posedge clk) begin
     end
 end
 
+// IN DEBUG:
+// if 
+
 assign calibration_arr_n = calibration_arr_n_curr;
 assign calibration_arr_p = calibration_arr_p_curr;
 
@@ -122,22 +125,14 @@ always_ff @(posedge clk) begin
     if (rst) begin
         calibration_arr_n_curr <= 8'b11000000;
         calibration_arr_p_curr <= 8'b11000000;
+    end else if (debug_mode) begin
+        calibration_arr_n_curr <= spi_reg_lsb[15:8];
+        calibration_arr_p_curr <= spi_reg_lsb[7:0];
     end else begin
         calibration_arr_n_curr <= calibration_arr_n_next;
         calibration_arr_p_curr <= calibration_arr_p_next;
     end
 
-end
-
-always_ff @(posedge clk) begin
-
-    if (rst) begin
-        lsb_reg <= 8'h03;
-    end else if (debug_mode) begin
-        lsb_reg <= spi_reg_lsb;
-    end else begin
-        lsb_reg <= lsb_reg_next;
-    end
 end
 
 always_comb begin
@@ -146,7 +141,6 @@ always_comb begin
     adaptive_fail = '0;
     calibration_arr_n_next = calibration_arr_n_curr;
     calibration_arr_p_next = calibration_arr_p_curr;
-    lsb_reg_next = lsb_reg;
     if ((calibration_arr_n_curr == '0 || calibration_arr_p_curr == '0) && inter_fail && !full) begin
         adaptive_fail = '1;
     end else if (inter_fail && !full) begin
@@ -160,53 +154,41 @@ always_comb begin
 
             if (entropy_counter < 128 && entropy_counter >= 0) begin                // 0-12.5
                 if (calibration_arr_p_curr != '1) begin
-                    calibration_arr_p_next = calibration_arr_p_curr + lsb_reg;
-                    lsb_reg_next = 8'h03;
+                    calibration_arr_p_next = calibration_arr_p_curr + 8'h03;
                 end else if (calibration_arr_n_curr != '0) begin
-                    calibration_arr_n_next = calibration_arr_n_curr - lsb_reg;
-                    lsb_reg_next = 8'h03;
+                    calibration_arr_n_next = calibration_arr_n_curr - 8'h03;
                 end
             end else if (entropy_counter < 255 && entropy_counter >= 128) begin     // 12.5-25
                 if (calibration_arr_p_curr != '1) begin
-                    calibration_arr_p_next = calibration_arr_p_curr + lsb_reg;
-                    lsb_reg_next = 8'h02;
+                    calibration_arr_p_next = calibration_arr_p_curr + 8'h02;
                 end else if (calibration_arr_n_curr != '0) begin
-                    calibration_arr_n_next = calibration_arr_n_curr - lsb_reg;
-                    lsb_reg_next = 8'h02;
+                    calibration_arr_n_next = calibration_arr_n_curr - 8'h02;
                 end
             end else if (entropy_counter < 460 && entropy_counter >= 256) begin     // 25-45
                 if (calibration_arr_p_curr != '1) begin
-                    calibration_arr_p_next = calibration_arr_p_curr + lsb_reg;
-                    lsb_reg_next = 8'h01;
+                    calibration_arr_p_next = calibration_arr_p_curr + 8'h01;
                 end else if (calibration_arr_n_curr != '0) begin
-                    calibration_arr_n_next = calibration_arr_n_curr - lsb_reg;
-                    lsb_reg_next = 8'h01;
+                    calibration_arr_n_next = calibration_arr_n_curr - 8'h01;
                 end
             end else if (entropy_counter < 563 && entropy_counter >= 461) begin     // 45-55
                 good_entropy_out = '1;
             end else if (entropy_counter < 767 && entropy_counter >= 564) begin     // 55-75
                 if (calibration_arr_p_curr != '0) begin
-                    calibration_arr_p_next = calibration_arr_p_curr - lsb_reg;
-                    lsb_reg_next = 8'h01;
+                    calibration_arr_p_next = calibration_arr_p_curr - 8'h01;
                 end else if (calibration_arr_n_curr != '1) begin
-                    calibration_arr_n_next = calibration_arr_n_curr + lsb_reg;
-                    lsb_reg_next = 8'h01;
+                    calibration_arr_n_next = calibration_arr_n_curr + 8'h01;
                 end
             end else if (entropy_counter < 895 && entropy_counter >= 768) begin     // 75-87.5
                 if (calibration_arr_p_curr != '0) begin
-                    calibration_arr_p_next = calibration_arr_p_curr - lsb_reg;
-                    lsb_reg_next = 8'h02;
+                    calibration_arr_p_next = calibration_arr_p_curr - 8'h02;
                 end else if (calibration_arr_n_curr != '1) begin
-                    calibration_arr_n_next = calibration_arr_n_curr + lsb_reg;
-                    lsb_reg_next = 8'h02;
+                    calibration_arr_n_next = calibration_arr_n_curr + 8'h02;
                 end
             end else if (entropy_counter <= 1023 && entropy_counter >= 896)         // 87.5-100
                 if (calibration_arr_p_curr != '0) begin
-                    calibration_arr_p_next = calibration_arr_p_curr - lsb_reg;
-                    lsb_reg_next = 8'h03;
+                    calibration_arr_p_next = calibration_arr_p_curr - 8'h03;
                 end else if (calibration_arr_n_curr != '1) begin
-                    calibration_arr_n_next = calibration_arr_n_curr + lsb_reg;
-                    lsb_reg_next = 8'h03;
+                    calibration_arr_n_next = calibration_arr_n_curr + 8'h03;
                 end
 
     end else begin

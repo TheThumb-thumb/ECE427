@@ -19,9 +19,7 @@ module control_tb;
     logic        jitter_sram_mux_out; // Serial debug output from selected jitter SRAM address
     logic        latch_sram_mux_in; // Serial debug input to selected latch SRAM address
     logic        jitter_sram_mux_in; // Serial debug input to selected jitter SRAM address
-    logic        conditioner_mux_output;  // Serial debug output from selected conditioner
     logic        conditioner_mux_input; // Serial debug input to selected conditioner
-    logic        DRBG_mux_output; // Serial debug output from selected DRBG
     logic        DRBG_mux_input;  // Serial debug input to selected DRBG
     logic [13:0] temp_counter_0, temp_counter_1, temp_counter_2, temp_counter_3; // Counters for temp sensors, verify w Anthony
     logic [13:0] temp_threshold_0, temp_threshold_1, temp_threshold_2, temp_threshold_3; // Thresholds for temp sensors
@@ -34,8 +32,11 @@ module control_tb;
     logic rst_n;
     logic mosi;
     logic ss_n;
+    logic output_to_input_direct; // Pin to connect output 2 directly to input
     logic spi_data_ready;
     logic [24:0] master_received;
+
+    logic input_pin_1;
 
 
     // Instantiate the control module
@@ -50,6 +51,7 @@ module control_tb;
         .miso(miso),
         .output_pin_2(output_pin_2),
         .output_pin_1(output_pin_1),
+        .output_to_input_direct(output_to_input_direct),
         .clk(clk), // This is the new system clock (muxed between ic_clk and debug_clk pins)
         .latch_entropy_mux_out(latch_entropy_mux_out), // Serial output from selected latch entropy source
         .jitter_entropy_mux_out(jitter_entropy_mux_out), // Serial debug output from selected latch entropy source
@@ -63,9 +65,7 @@ module control_tb;
         .jitter_sram_mux_out(jitter_sram_mux_out),  // Serial debug output from selected jitter SRAM address
         .latch_sram_mux_in(latch_sram_mux_in), // Serial debug input to selected latch SRAM address
         .jitter_sram_mux_in(jitter_sram_mux_in),  // Serial debug input to selected jitter SRAM address
-        .conditioner_mux_output(conditioner_mux_output),  // Serial debug output from selected conditioner
         .conditioner_mux_input(conditioner_mux_input), // Serial debug input to selected conditioner
-        .DRBG_mux_output(DRBG_mux_output),  // Serial debug output from selected DRBG
         .DRBG_mux_input(DRBG_mux_input), // Serial debug input to selected DRBG
         .temp_counter_0(temp_counter_0),  // Counters for temp sensors
         .temp_counter_1(temp_counter_1),
@@ -83,9 +83,10 @@ module control_tb;
         .spi_data_ready(spi_data_ready)
     );
 
-    assign input_pin_1 = 1'b0;
+    
     // Clock generation (SPI clock)
     initial begin
+        
         debug_clk = 0;
         forever #5 debug_clk = ~debug_clk; // 100 MHz clock
     end
@@ -95,8 +96,11 @@ module control_tb;
         forever #5 ic_clk = ~ic_clk; // 100 MHz clock
     end
 
+
+
     
     logic [24:0] test_word;
+    logic [24:0] fake_input;
     
     // Test sequence
     initial begin
@@ -109,7 +113,7 @@ module control_tb;
         assign test_word = 25'b1_1100_1000_0000_0000_0000_0000;
         // Test passed 9/29/25
         // Initial states
-
+        input_pin_1 = 0;
         rst_n = 0;
         ss_n = 1; // Not selected
         mosi = 0;
@@ -224,9 +228,7 @@ module control_tb;
 
         // ------------------- Try calibration bit write then read ----------------------
         assign test_word = 25'b1_0_0100_000_1100_0011_1100_0001; // Register operation_write_address0x04_nothing_value
-        // Test passed?
-
-
+        // Test passed 10/2/25
 
         // Select the slave
         @(posedge clk);
@@ -296,9 +298,90 @@ module control_tb;
 
         ss_n = 1;
 
-
-
         #20;
+
+        // ---------------- Set output 2 to temp sensor good 1
+        assign temp_sense_0_good = 1'b1;
+        assign test_word = 25'b0_000_00010_000_00001_000_00000;
+        // Test passed: 9/29/25
+        // Initial states
+
+        // Select the slave
+        @(posedge clk);
+        ss_n = 0;
+        #15;
+
+        @(negedge clk);
+        for (int i=word_width-1; i>=0; i--) begin
+            mosi = test_word[i]; // MSB first
+            #10;
+        end
+
+        ss_n = 1;
+        // Check results
+        if (spi_data_ready) begin
+            // Deselect the slave
+            $display("Data seen on pin 2: %h", output_pin_2);
+            if (output_pin_2 ==temp_sense_0_good) begin
+                $display("TX Test PASSED!");
+            end else begin
+                $display("TX Test FAILED: Expected %h", temp_sense_0_good);
+            end
+        end else begin
+            $display("TX Test FAILED: data_ready not high");
+        end
+        ss_n = 1;
+        mosi = 0;
+
+
+        // ---------------- Set input 1 to conditioner mux
+
+        // output 1 =vcc, output2 = clk, input 1 -> conditioner ux
+        assign test_word = 25'b0_000_00000_000_00001_101_00000;
+        assign fake_input = 25'b1010_1010_1010_1010_1010_1010; // input to be on pin 1
+
+        // Test passed: 9/29/25
+        // Initial states
+
+        // Select the slave
+        @(posedge clk);
+        ss_n = 0;
+        #15;
+
+        @(negedge clk);
+        for (int i=word_width-1; i>=0; i--) begin
+            mosi = test_word[i]; // MSB first
+            #10;
+        end
+
+        ss_n = 1;
+
+        // Check results
+        if (spi_data_ready) begin
+            // Deselect the slave
+            @(posedge clk);
+            @(posedge clk);
+
+            $display("Curr state: %h", curr_state);
+            if (curr_state == test_word) begin
+                $display("Curr state Test PASSED!");
+            end else begin
+                $display("Curr state FAILED: Expected %h", test_word);
+            end
+        end else begin
+            $display("Curr state FAILED: data_ready not high");
+        end
+
+        ss_n = 1;
+        mosi = 0;
+
+        @(posedge clk)
+        for (int i=24; i>=0; i--) begin
+            input_pin_1 = fake_input[i]; // MSB first
+            #10;
+        end
+
+        #30
         $finish;
     end
 
