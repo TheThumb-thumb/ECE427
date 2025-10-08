@@ -20,7 +20,7 @@ module top (
     input rand_req_t rand_req_type,    // Request type (see types.sv for scheme) 
     output logic [7:0] rand_byte,       // Byte-sliced output
     output logic rand_valid,            // Output valid signal (active high)
-
+    
     // SPI Pins
     input logic ss_n,       // Slave Select (active low)
     input logic debug_clk,  // Debug clock from FPGA
@@ -34,12 +34,18 @@ module top (
     output logic output_pin_1,
     input logic input_pin_1,
 
-    //Temp pins for verification (no output buffer)
-    output logic [256:0] temp_seed_out,
-    output logic [127:0] temp_drbg_out,
-    output logic temp_out_valid
+    // //Temp pins for verification (no output buffer or entropy)
+    input logic [es_sources-1:0] entropy_source_array
+    // output logic [256:0] temp_seed_out,
+    // output logic [127:0] temp_drbg_out,
+    // output logic temp_out_valid
+    output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
+    output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
+    output logic [jitter_sources-1:0] jitter_disable_arr;
 
 );
+
+    logic empty;
 
     //------------------------------------------------------------------
     // Wire/Reg Instantiations
@@ -59,6 +65,10 @@ module top (
 
     //Connections between DRBG and Output Buffer
     logic drbg_output_valid, drbg_output_ready;
+    logic drbg_instantiate, drbg_reseed, drbg_generate; 
+    logic [15:0] drbg_num_blocks;
+    logic drbg_random_valid;
+    logic [127:0] drbg_random_block;
 
     // Wires to connect control to other modules
     logic        clk;
@@ -82,6 +92,16 @@ module top (
     logic [13:0] temp_threshold_0, temp_threshold_1, temp_threshold_2, temp_threshold_3; // Thresholds for temp sensors
     logic        temp_sense_0_good, temp_sense_1_good, temp_sense_2_good, temp_sense_3_good; // Single bit boolean good/bad for temp sensor
     logic [24:0] curr_state; // Contains all the info for 
+
+    // MUX port declarations
+    logic [31:0] latch_entropy_sources_out, 
+    latch_oht_default_in, 
+    jitter_entropy_sources_out,
+    jitter_oht_default_in,
+    latch_oht_default_out,
+    latch_sram_default_in,
+    jitter_oht_default_out,
+    jitter_sram_default_in;
 
     //------------------------------------------------------------------
     // Module Instantiations
@@ -129,7 +149,7 @@ module top (
         .curr_state(curr_state)
     );
 
-    // Mux between Latch Entropy Sources and Latch OHT
+    // Mux between Latch Entropy Sources and Latch OHT. This 
     logic [5:0] output_select_latch_entropy_oht;
     logic [5:0] input_select_latch_entropy_oht;
     always_comb begin
@@ -226,7 +246,23 @@ module top (
     );
 
     // Instantiate the OHT
+    oht_top oht_inst_0 (
+        .clk(clk),
+        .rst(~rst_n),
 
+        .ES_in(entropy_source_array),
+        .deque(oht_cond_ready),
+        .debug_mode(debug),
+        .spi_reg_lsb(curr_state[15:0]),
+
+        .cond_out({key,message}),
+        .full(oht_cond_valid),
+        .empty(empty),
+
+        .arr_n(arr_n),
+        .arr_p(arr_p),
+        .j_disable_arr(jitter_disable_arr)
+    );
 
     // Instantiate the Conditioner
 
@@ -259,35 +295,58 @@ module top (
     );
 
 
-    //Instantiate the DRBG
-    aes_ctr_drbg #(
-        .KEY_BITS(128),
-        .BLOCK_BITS(128),
-        .SEED_BITS(256),
-        .RESEED_INTERVAL(511)
-    ) drbg_0 (
-        .clk(clk), 
-        .rst_n(rst_n),
+    //Instantiate the DRBG w/ wrapper
+    ctr_drbg_wrapper #(
+        .KEY_BITS (128),
+        .DATA_WIDTH (256),
+        .RESEED_INTERVAL (511)
+    ) u_drbg_rappin (
+        .clk                 (clk),
+        .rst_n               (rst_n),
 
-        .instantiate_i(),
-        .reseed_i(),
-        .generate_i(),
-        .num_blocks_i(),
+        // conditioner handshake
+        .drbg_ready_o        (cond_drbg_ready),        // -> conditioner
+        .drbg_valid_i        (cond_drbg_valid),        // <- conditioner
+        .seed_i              (seed),                   // <- conditioner
 
-        .seed_material_i(seed),
-        .seed_valid_i(cond_drbg_valid),
+        // commands froM control
+        .instantiate_i       (drbg_instantiate),
+        .reseed_i            (drbg_reseed),
+        .generate_i          (drbg_generate),
+        .num_blocks_i        (drbg_num_blocks),
 
-        .additional_input_i(),
-
-        .busy_o(),
-        .done_o(),
-        .random_valid_o(drbg_output_valid),
-        .random_block_o(temp_drbg_out)
+        // random output blocks streamin out
+        .random_valid_o      (drbg_random_valid),
+        .random_block_o      (drbg_random_block)
     );
 
     // temp signals pretending to be the buffer
-    assign cond_output_ready = 1'b1;
-    assign temp_out_valid = cond_output_valid || drbg_output_valid;
-    assign temp_seed_out = seed;
+    // assign cond_output_ready = 1'b1;
+    // assign temp_out_valid = cond_output_valid || drbg_random_valid;
+    // assign temp_seed_out = seed;
+    // assign temp_dbrbg_out = drbg_random_block;
+
+    // Instantiate the output buffer
+    output_buffer #(
+        .DATA_LENGTH(256),
+        .RDSEED_QUEUE_LENGTH(8)
+    ) output_buffer_inst (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .seed_valid_i(cond_output_valid),
+        .seed_port_i(seed),
+        .seed_ready_o(cond_output_ready),
+
+        .rand_valid_i(drbg_random_valid),
+        .rand_port_i(drbg_random_block),
+        .rand_ready_o(drbg_output_ready),
+
+        .rand_req(rand_req),
+        .rand_req_type(rand_req_type),
+        .rand_byte(rand_byte),
+        .rand_valid(rand_valid)
+    );
+
 
 endmodule

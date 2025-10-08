@@ -20,6 +20,7 @@ module oht_sram_mux (
     always_comb begin
         // 1. Default assignments (normal operation)
         sram_in = oht_outputs;
+        oht_mux_out = 1'b0;
 
         // 2. Debug logic overrides the defaults
         if (debug) begin

@@ -43,17 +43,6 @@ package le_types;
         GEN
     } trivium_state_t;
 
-    typedef enum logic {  
-        RDRAND  = 1'b0,
-        RDSEED  = 1'b1
-    } rand_instr_t;
-
-    typedef enum logic [1:0] {  
-        _16bit   = 2'b00,
-        _32bit   = 2'b01,
-        _64bit   = 2'b10
-    } rand_width_t;
-
     typedef enum logic [2:0] {
         S_IDLE,
         S_INIT_ADD_KEY,
@@ -75,5 +64,11 @@ package le_types;
         logic [31:0] data;
         logic flag; // indicates whether we should start using the values provided by input for comparison
     } sram_dp_reg_t;
+
+    typedef enum logic [2:0] { 
+        OUTPUT_IDLE,
+        OUTPUT_BYTES,
+        OUTPUT_DONE
+    } output_buffer_state_t;
 
 endpackage: le_types

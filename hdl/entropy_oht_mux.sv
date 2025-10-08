@@ -18,6 +18,7 @@ module entropy_oht_mux (
     always_comb begin
         // 1. Default assignments for normal operation
         oht_in = entropy_sources_out;
+        entropy_mux_out = 1'b0;
 
         // 2. Debug logic overrides the defaults if debug is active
         if (debug) begin

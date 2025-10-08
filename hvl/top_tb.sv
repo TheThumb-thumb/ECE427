@@ -20,6 +20,12 @@ module top_tb;
 	//DEBUG IO
 	logic input_pin_1, output_pin_1, output_pin_2, debug;
 
+	//TEMP IO (before buffer/entropy is made)
+	logic [es_sources-1:0] entropy_source_array;
+	logic [256:0] temp_seed_out;
+	logic [127:0] temp_drbg_out;
+	logic temp_out_valid;
+
 	top dut(
 		.ic_clk(top_clk),
 		.rst_n(top_reset),
@@ -39,8 +45,23 @@ module top_tb;
 		.output_pin_2(input_pin_1),
 		.output_pin_1(output_pin_1),
 		.input_pin_1(output_pin_2)
+
+		// .entropy_source_array(entropy_source_array),
+		// .temp_seed_out(temp_seed_out),
+		// .temp_drbg_out(temp_drbg_out),
+		// .temp_out_valid(temp_out_valid)
 		
 	);
+
+	initial begin
+		debug = 1'b0;
+		forever begin 
+			@(posedge top_clk);
+			entropy_source_array = { $urandom, $urandom };
+		end
+		rand_req = 1'b1;
+		rand_req_type = RDSEED_64;
+	end
 
 	//Drive reset and log signals
 	initial begin
@@ -48,7 +69,7 @@ module top_tb;
 		$fsdbDumpvars(0, "+all");
 		#10ns
 		top_reset = 1'b1;
-		#1000ns
+		#100000ns
 		$finish();
 	end
 

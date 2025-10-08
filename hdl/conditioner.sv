@@ -49,7 +49,7 @@ always_ff @ (posedge clk) begin
         seed_staged <= 1'b0;
     end else begin
         if(start) busy <= 1'b1;
-        else if(busy && (drbg_ready_i || rdseed_ready_i)) busy <= 1'b0;
+        else if(busy && done && (drbg_ready_i || rdseed_ready_i)) busy <= 1'b0;
 
         if(done) seed_staged <= 1'b1;
         else if(seed_staged && (drbg_ready_i || rdseed_ready_i)) seed_staged <= 1'b0;

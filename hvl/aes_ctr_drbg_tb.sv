@@ -1,145 +1,202 @@
 `timescale 1ns/1ps
-
-// -----------------------------------------------------------------------------
-// Testbench: aes_ctr_drbg_tb.sv
-//   +NUM=<nblocks>                           (default 8)
-//   +ENTROPY=<64hex> +NONCE=<64hex> +PERS=<64hex>  (each 256-bit hex)
-//   +KDF=<32hex>                             (128-bit hex)
-//   +ADDL=<64hex>                            (256-bit hex, optional; default 0)
-//   Example:
-//     +NUM=16 +KDF=000102...1f +ENTROPY=... +NONCE=... +PERS=... +ADDL=...
-// Output : writes "drbg_out.hex" (one 128-bit hex per line, MSB first)
-// -----------------------------------------------------------------------------
+import le_types::*;
+import params::*;
 module ctr_tb;
 
-  localparam int DATA_WIDTH = 256;
-  localparam int KEY_BITS   = 128;
 
-  // io
-  logic                   clk, rst_n;
-  logic                   instantiate_i, reseed_i, generate_i;
-  logic [15:0]            num_blocks_i;
-  logic [DATA_WIDTH-1:0]  entropy_i, nonce_i, personalization_i, additional_input_i;
-  logic [KEY_BITS-1:0]    k_df_i;
-  logic                   busy_o, done_o, random_valid_o;
-  logic [KEY_BITS-1:0]    random_block_o;
+  // Clock / Reset
 
-  // clk & rst
+  logic clk, rst_n;
+  localparam int CLK_PS = 10_000; // 10 ns period with 1ps timescale
   initial begin
     clk = 0;
-    forever #5 clk = ~clk; // 100 MHz
+    forever #(CLK_PS/2) clk = ~clk;
   end
 
   initial begin
     rst_n = 0;
-    instantiate_i = 0; reseed_i = 0; generate_i = 0;
-    num_blocks_i  = 0;
-    entropy_i = '0; nonce_i = '0; personalization_i = '0; additional_input_i = '0;
-    k_df_i = '0;
-    repeat (8) @(posedge clk);
+    repeat (5) @(posedge clk);
     rst_n = 1;
   end
 
-  // DUT
+
+  // DUT I/O (NEW interface)
+
+  // Commands
+  logic         instantiate_i;
+  logic         reseed_i;
+  logic         generate_i;
+  logic [15:0]  num_blocks_i;
+
+  // Seed interface (from conditioner in real chip; here, TB drives it)
+  logic [255:0] seed_material_i;
+  logic         seed_valid_i;
+
+  // Optional additional input for post-generate update
+  logic [255:0] additional_input_i;
+
+  // Outputs
+  logic         busy_o;
+  logic         done_o;
+  logic         random_valid_o;
+  logic [127:0] random_block_o;
+
+
+  // DUT instantiation (MATCHES decoupled core ports)
+
   aes_ctr_drbg #(
-    .DATA_WIDTH(256),
-    .KEY_BITS  (128)
+    .KEY_BITS        (128),
+    .BLOCK_BITS      (128),
+    .SEED_BITS       (256),
+    .RESEED_INTERVAL (511)   // change if you want Intel-style 511 blocks per seed
   ) dut (
-    .clk(clk), .rst_n(rst_n),
-    .instantiate_i(instantiate_i),
-    .reseed_i(reseed_i),
-    .generate_i(generate_i),
-    .num_blocks_i(num_blocks_i),
-    .entropy_i(entropy_i),
-    .nonce_i(nonce_i),
-    .personalization_i(personalization_i),
+    .clk               (clk),
+    .rst_n             (rst_n),
+
+    .instantiate_i     (instantiate_i),
+    .reseed_i          (reseed_i),
+    .generate_i        (generate_i),
+    .num_blocks_i      (num_blocks_i),
+
+    .seed_material_i   (seed_material_i),
+    .seed_valid_i      (seed_valid_i),
+
     .additional_input_i(additional_input_i),
-    .k_df_i(k_df_i),
-    .busy_o(busy_o),
-    .done_o(done_o),
-    .random_valid_o(random_valid_o),
-    .random_block_o(random_block_o)
+
+    .busy_o            (busy_o),
+    .done_o            (done_o),
+    .random_valid_o    (random_valid_o),
+    .random_block_o    (random_block_o)
   );
 
-  // +args
-  int unsigned NUM;
-  initial begin
-    if (!$value$plusargs("NUM=%d", NUM)) NUM = 8;
+
+  // Helpers
+task automatic pulse(ref logic sig);
+  sig = 1'b1;
+  @(posedge clk);
+  sig = 1'b0;
+endtask
+
+task automatic wait_idle();
+  // Core is idle when busy_o == 0
+  @(posedge clk);
+  while (busy_o) @(posedge clk);
+endtask
+
+
+task automatic do_instantiate(input logic [255:0] seed);
+begin
+  wait_idle();
+  seed_material_i = seed;
+
+  // 1-cycle instantiate pulse
+  instantiate_i   = 1'b1;
+
+  // Hold seed_valid_i for 2 cycles to guarantee capture
+  seed_valid_i    = 1'b1;
+  @(posedge clk);
+  instantiate_i   = 1'b0;
+  @(posedge clk);
+  seed_valid_i    = 1'b0;
+
+  $display("%0t : INST sent (seed_valid held 2 cycles). busy=%0b", $time, busy_o);
+
+  wait (done_o);
+  @(posedge clk);
+end
+endtask
+
+
+task automatic do_reseed(input logic [255:0] seed);
+  begin
+    wait_idle();                         
+    seed_material_i = seed;
+    reseed_i        = 1'b1;
+    seed_valid_i    = 1'b1;              // should be same cycle as reseed_i
+    @(posedge clk);
+    reseed_i        = 1'b0;
+    seed_valid_i    = 1'b0;
+
+    wait (done_o); @(posedge clk);
   end
+endtask
 
-  // grab big hex
-  function automatic bit get_hex256(string name, output logic [255:0] v);
-    string fmt; fmt = {name, "=%h"};
-    if ($value$plusargs(fmt, v)) return 1;
-    v = '0; return 0;
-  endfunction
-  function automatic bit get_hex128(string name, output logic [127:0] v);
-    string fmt; fmt = {name, "=%h"};
-    if ($value$plusargs(fmt, v)) return 1;
-    v = '0; return 0;
-  endfunction
+task automatic do_generate(input int unsigned nblocks);
+  int unsigned seen = 0;
+  begin
+    wait_idle();                        
+    num_blocks_i = nblocks[15:0];
+    // 1-cycle pulse
+    generate_i   = 1'b1; @(posedge clk); generate_i = 1'b0;
 
-  // plusargs
-  initial begin
-    void'(get_hex256("ENTROPY",        entropy_i));
-    void'(get_hex256("NONCE",          nonce_i));
-    void'(get_hex256("PERS",           personalization_i));
-    void'(get_hex256("ADDL",           additional_input_i));
-    void'(get_hex128("KDF",            k_df_i));
+    // Collect until post-generate Update completes
+    do begin
+      @(posedge clk);
+      if (random_valid_o) begin
+        seen++;
+        $display("%0t DRBG block[%0d] = %032h", $time, seen, random_block_o);
+      end
+    end while (!done_o);
+
+    if (seen != nblocks)
+      $warning("Requested %0d blocks but observed %0d.", nblocks, seen);
+
+    @(posedge clk);
   end
+endtask
 
-  // outs file
-  int fh;
-  initial begin
-    fh = $fopen("drbg_out.hex", "w");
-    if (fh == 0) begin
-      $fatal(1, "Failed to open drbg_out.hex");
+initial begin
+  // Create the FSDB in the run directory (vcs/)
+  $fsdbDumpfile("aes_ctr_drbg_tb.fsdb");
+  $fsdbDumpvars(0, "+all");   // use your top TB module name here
+  // Optional: $fsdbDumpon;
+end
+
+
+// timeout check (~1 ms @ 10 ns clk)
+initial begin
+  time limit = 1_000_000ps;           // 1 ms = 1e9 ps; adjust as you like
+  time start = $time;
+  forever begin
+    @(posedge clk);
+    if ($time - start >= 100_000_000) begin
+      $error(" timeout: busy=%0b done=%0b rand_v=%0b t=%0t",
+             busy_o, done_o, random_valid_o, $time);
+      $finish;
     end
   end
+end
 
-  // get outs
-  always @(posedge clk) begin
-    if (random_valid_o) begin
-      // Write MSB-first 128-bit word
-      $fdisplay(fh, "%032h", random_block_o);
-    end
-  end
 
-  // test1
-  initial begin : main
-    @(posedge rst_n);
+// Tests
+initial begin
+  // defaults
+  instantiate_i = 0;
+  reseed_i = 0;
+  generate_i = 0;
+  num_blocks_i = '0;
+  seed_material_i = '0;
+  seed_valid_i = 0;
+  additional_input_i = '0;
 
-    // instan
-    instantiate_i <= 1'b1;
-    num_blocks_i  <= NUM[15:0];
-    @(posedge clk);
-    instantiate_i <= 1'b0;
+  // Waitin for reset
+  wait(rst_n);
 
-    // Wait instantiate done
-    wait(done_o);
-    @(posedge clk);
+  // Instantiate with a known seed
+  do_instantiate(256'h00010203_04050607_08090A0B_0C0D0E0F__10111213_14151617_18191A1B_1C1D1E1F);
 
-    // create n blocs
-    generate_i <= 1'b1;
-    @(posedge clk);
-    generate_i <= 1'b0;
 
-    // Wait until post-generate Update finish
-    wait(done_o);
-    @(posedge clk);
+  // hanging here, stuck after instantiate tb hangin
 
-  
-    // reseed_i <= 1'b1; @(posedge clk); reseed_i <= 1'b0;
-    // wait(done_o); @(posedge clk);
-    // generate_i <= 1'b1; @(posedge clk); generate_i <= 1'b0;
-    // wait(done_o); @(posedge clk);
+  // Generate 8 blocks
+  do_generate(8);
 
-    // Wrap 
-    #50;
-    $fclose(fh);
-    $display("[%0t] CTR_DRBG TB done, out in drbg_out.hex", $time);
-    $finish;
-  end
+  // reseed with a new seed and gen 4 more blocks
+  do_reseed(256'hA5A5A5A5_A5A5A5A5_5A5A5A5A_5A5A5A5A__01234567_89ABCDEF_FEDCBA98_76543210);
+  do_generate(4);
 
+  $display("DRBG TB: done.");
+  $finish;
+end
 
 endmodule

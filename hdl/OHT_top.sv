@@ -15,7 +15,8 @@ import params::*;
     output logic empty,
     output logic [latch_sources-1:0][calib_bits-1:0] arr_n,
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
-    output logic [jitter_sources-1:0] j_disable_arr
+    output logic [jitter_sources-1:0] j_disable_arr,
+    output logic [es_sources-1:0] rd_good_arr
 
 );
 
@@ -23,7 +24,7 @@ logic [es_sources-1:0] fail_arr;
 logic [es_sources-1:0] valid_arr;
 logic [latch_sources-1:0] es_out_latch;
 logic [jitter_sources-1:0] es_out_jitter;
-logic [es_sources-1:0] rd_good_arr;
+// logic [es_sources-1:0] rd_good_arr;
 logic [latch_sources-1:0] mask_in;
 
 // disregard A outputs unless debug needs them?
@@ -41,7 +42,7 @@ logic [$clog2(sram_addr)-1:0] TAA, TAB;
 logic [sram_word-1:0] TDA, TQA, TDB, TQB;
 
 // we are never writing in port B so DB can be whatever
-logic [sram_word-1:0] DB = 'x;
+logic [sram_word-1:0] DB;
 
 sram_dp_reg_t rd_reg, rd_reg_next, rd_reg_out, wr_reg, wr_reg_next, wr_reg_out;
 logic [$clog2(sram_addr)-1:0] cnt, read_cnt;
@@ -93,10 +94,10 @@ always_ff @(posedge clk) begin
     end else if (full) begin
         // do nothing
     end else begin
-        if (cnt == 2046) begin
+        if (cnt == 2046 && valid_arr[31:0] != '0) begin
             cnt <= 1'b1;
             latch_jitter_flag <= ~latch_jitter_flag; // if high then odd address -> jitter
-        end else if (cnt == 2047) begin
+        end else if (cnt == 2047 && valid_arr[63:32] != '0) begin
             cnt <= '0;
             latch_jitter_flag <= ~latch_jitter_flag; // if low then even addresses -> latch
         end else begin
@@ -119,13 +120,14 @@ always_ff @(posedge clk) begin
 
     if (rst) begin
         read_cnt <= '0;
+        latch_jitter_flag_rd <= '0;
     end else if (full) begin
         // do nothing
-    end else if (read_cnt_flag) begin
+    end else if (read_cnt_flag && valid_arr[31:0] != '0) begin
         if (read_cnt == 2046) begin
             read_cnt <= 1'b1;
             latch_jitter_flag_rd <= ~latch_jitter_flag_rd; // if high then odd address -> jitter
-        end else if (read_cnt == 2047) begin
+        end else if (read_cnt == 2047 && valid_arr[63:32] != '0) begin
             read_cnt <= '0;
             latch_jitter_flag_rd <= ~latch_jitter_flag_rd; // if low then even addresses -> latch
         end else begin
