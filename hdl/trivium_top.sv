@@ -8,9 +8,9 @@ import le_types::*;
     
     input logic [DATA_WIDTH-1:0]        cond_in,
     input logic                         cond_valid,    // Conditioner has sent seed for trivium
-    input logic                         stall,         // if you want to stall trivium and check bits sent out
+    // input logic                         stall,         // if you want to stall trivium and check bits sent out
 
-    output logic                        seed_req,      // request new seed after 1500 cycles of use so gives 300 cycles for buffers to fill up if needed
+    output logic                        seed_req,      // request new seed after 2048 cycles of use so gives some cycles for buffers to fill up if needed
     output logic                        triv_ready,    // after initial 1152 steps it can start generating so this shows that
     output logic [7:0]                  rrand_out      // provide 8 random bits to pins if rrand instruction given
 
@@ -55,9 +55,6 @@ import le_types::*;
 
     always_comb begin
         next_state = curr_state; 
-        if (rst) begin
-            next_state = TRIV_IDLE;
-        end
 
     /*  TRIV_IDLE - Do nothing until request is sent for a key
         SETUP - Random iv generated from ADC start trivium setup
@@ -80,9 +77,10 @@ import le_types::*;
             end
             GEN: begin
                 triv_ready = 1'b1;
+                seed_req = 1'b0;
                 if (done) begin
                     next_state = TRIV_IDLE;
-                    seed_req = 1'b0;
+                    seed_req = 1'b1;
                 end
             end
             default: begin
@@ -105,7 +103,7 @@ import le_types::*;
             if (setup_cnt == SETUP_TIME) begin
                 setup_cnt <= '0;
             end
-            setup_cnt <= setup_cnt + 1'b1;
+            // setup_cnt <= setup_cnt + 1'b1;
         end else begin
             curr_state <= next_state;
         end

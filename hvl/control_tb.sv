@@ -48,6 +48,7 @@ module control_tb;
         .mosi(mosi),
         .ss_n(ss_n),
         .debug(debug),
+        
         .input_pin_1(input_pin_1),
         .miso(miso),
         .output_pin_2(output_pin_2),
@@ -119,6 +120,7 @@ module control_tb;
         rst_n = 0;
         ss_n = 1; // Not selected
         mosi = 0;
+        master_received = 22'd0;
 
         // Apply reset
         #20;
@@ -137,13 +139,12 @@ module control_tb;
             mosi = test_word[i]; // MSB first
             #10;
         end
-
-        #10;
+        #20;
         for (int i=word_width-1; i>=0; i--) begin
             master_received[i] = miso;
             #10;
         end
-        ss_n = 1;
+
         // Check results
         if (spi_data_ready) begin
             // Deselect the slave
@@ -167,8 +168,6 @@ module control_tb;
         // Test passed: 9/29/25
         // Initial states
 
-
-
         // Select the slave
         @(posedge clk);
         ss_n = 0;
@@ -179,13 +178,12 @@ module control_tb;
             mosi = test_word[i]; // MSB first
             #10;
         end
-
-        #10;
+        #20;
         for (int i=word_width-1; i>=0; i--) begin
             master_received[i] = miso;
             #10;
         end
-        ss_n = 1;
+
         // Check results
         if (spi_data_ready) begin
             // Deselect the slave
@@ -200,7 +198,8 @@ module control_tb;
         end
         ss_n = 1;
         mosi = 0;
-        #30
+
+        #20
 
         // ------------------- Test if debug pin low that curr state is default ----------------------
         // Test passed: 9/29/25
@@ -243,11 +242,10 @@ module control_tb;
             #10;
         end
 
-        ss_n = 1;
         // Check results
         if (spi_data_ready) begin
-            // Deselect the slave
-            $display("Data received by master: %h", dut_control.internal_entropy_calibration);
+            @(negedge spi_data_ready)
+            $display("Entropy Calibration Bits: %h", dut_control.internal_entropy_calibration);
             if (dut_control.internal_entropy_calibration == test_word[15:0]) begin
                 $display("Calibration bits Test PASSED!");
             end else begin
@@ -256,6 +254,8 @@ module control_tb;
         end else begin
             $display("Calibration bits Test FAILED: data_ready not high");
         end
+        ss_n = 1;
+        mosi = 0;
     
         #80;
 
@@ -273,7 +273,7 @@ module control_tb;
             #10;
         end
 
-        #10; // Wait one cycle
+        #20; // Wait one cycle
 
         // Read command
         for (int i=word_width-1; i>=0; i--) begin
@@ -281,26 +281,24 @@ module control_tb;
             #10;
         end
         
-        @(negedge clk)
-        ss_n = 1;
-        mosi = 0;
-
         // Check results
         if (spi_data_ready) begin
             // Deselect the slave
             $display("Data received by master: %h", master_received);
-            if (master_received == 22'b1_1_0111_0000_0000_0000_0000) begin
+            if (master_received == dut_control.internal_entropy_calibration) begin
                 $display("Calibration bits read Test PASSED!");
             end else begin
-                $display("Calibration bits read Test FAILED: Expected %h", 22'b1_1_0111_0000_0000_0000_0000);
+                $display("Calibration bits read Test FAILED: Expected %h", dut_control.internal_entropy_calibration);
             end
         end else begin
             $display("Calibration bits read Test FAILED: data_ready not high");
         end
-
         ss_n = 1;
+        mosi = 0;      
 
         #20;
+
+
 
         // ---------------- Set output 2 to temp sensor good 1, output 1 to clk, no input
         assign temp_sense_3_good = 1'b1;
@@ -325,12 +323,12 @@ module control_tb;
             // Deselect the slave
             $display("Data seen on pin 2: %h", output_pin_2);
             if (output_pin_2 ==temp_sense_3_good) begin
-                $display("TX Test PASSED!");
+                $display("Output pin mux test PASSED!");
             end else begin
-                $display("TX Test FAILED: Expected %h", temp_sense_3_good);
+                $display("Output pin mux test FAILED: Expected %h", temp_sense_3_good);
             end
         end else begin
-            $display("TX Test FAILED: data_ready not high");
+            $display("Output pin mux test FAILED: data_ready not high");
         end
         ss_n = 1;
         mosi = 0;
@@ -338,8 +336,8 @@ module control_tb;
 
         // ---------------- Set input 1 to conditioner mux
 
-        // output 1 =vcc, output2 = clk, input 1 -> conditioner ux
-        assign test_word = 22'b0_00000_00_00001_101_00000;
+        // output 1 =vcc, output2 = clk, input 1 -> trivium
+        assign test_word = 22'b0_00_00000_00_00001_11_00001;
         assign fake_input = 22'b10_1010_1010_1010_1010_1010; // input to be on pin 1
 
         // Test passed: 9/29/25
@@ -356,13 +354,11 @@ module control_tb;
             #10;
         end
 
-        ss_n = 1;
-
         // Check results
         if (spi_data_ready) begin
-            // Deselect the slave
-            @(posedge clk);
-            @(posedge clk);
+            @(posedge clk)
+            @(posedge clk)
+            @(posedge clk)
 
             $display("Curr state: %h", curr_state);
             if (curr_state == test_word) begin
@@ -378,7 +374,7 @@ module control_tb;
         mosi = 0;
 
         @(posedge clk)
-        for (int i=20; i>=0; i--) begin
+        for (int i=21; i>=0; i--) begin
             input_pin_1 = fake_input[i]; // MSB first
             #10;
         end

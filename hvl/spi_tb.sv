@@ -6,17 +6,17 @@ module spi_tb;
     // DUT Interface Signals
     logic sclk;
     logic rst_n;
-    logic [24:0] data_to_send;
-    logic [24:0] master_received;
+    logic [21:0] data_to_send;
+    logic [21:0] master_received;
     logic send_trigger;
     logic mosi;
     logic ss_n;
     logic miso;
-    logic [24:0] data;
+    logic [21:0] data;
     logic data_ready;
 
-    logic [24:0] test_word;
-    assign test_word = 24'hDEDBEF;
+    logic [21:0] test_word;
+    assign test_word = 22'b10_1010_1010_1010_1010_1010;
 
     // Instantiate the DUT
     spi  dut (
@@ -60,7 +60,7 @@ module spi_tb;
         ss_n = 0;
         #15;
 
-        for (int i=24; i>=0; i--) begin
+        for (int i=21; i>=0; i--) begin
             mosi = test_word[i]; // MSB first
             #10;
         end
@@ -80,6 +80,8 @@ module spi_tb;
         end else begin
             $display("RX Test FAILED: data_ready not high");
         end
+
+        #20;
 
         // ------------------- Test TX -----------------------
         // Initial states
@@ -103,7 +105,7 @@ module spi_tb;
         send_trigger = 0;
 
         
-        for (int i=24; i>=0; i--) begin
+        for (int i=21; i>=0; i--) begin
             master_received[i] = miso;
             #10;
         end
@@ -123,14 +125,14 @@ module spi_tb;
         end else begin
             $display("TX Test FAILED: data_ready not high");
         end
-        #10;
+        #20;
         // ------------------- Test Simulatenous -----------------------
 
         // Initial states
         rst_n = 0;
         ss_n = 1; // Not selected
         mosi = 0;
-        data_to_send = 24'hBEDBEF;
+        data_to_send = 22'b10_1010_1010_1010_1010_1010;
         send_trigger = 0;
 
         // Apply reset
@@ -140,18 +142,16 @@ module spi_tb;
 
         // // Select the slave
         ss_n = 0;
-        #5;
         send_trigger = 1;
         #10;
         send_trigger = 0;
 
-        for (int i=24; i>=0; i--) begin
+        for (int i=21; i>=0; i--) begin
             mosi = test_word[i]; // MSB first
             master_received[i] = miso;
             #10;
         end
 
-        
         ss_n = 1;
 
         // Check results

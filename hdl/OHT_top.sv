@@ -185,7 +185,7 @@ generate
         );
     end
     for (i = 0; i < 32; i++) begin : gen_jitter
-        OHT_J latch_inst (
+        OHT_J jitter_inst (
             .adc_in(ES_in[32+i]),
             .clk(clk),
             .rst(rst),

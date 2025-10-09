@@ -60,7 +60,7 @@ always_ff @ (posedge clk) begin
     if (debug) begin
         // if we are in debug mode and the input pin is driving us, serially shift
         // that pins data into the debug registers, starting with the key
-        if(debug_register == 8'b1010_0000) begin 
+        if(debug_register == 8'b1100_0000) begin 
             if(debug_ctr < 128) debug_key_buffer[debug_ctr] <= serial_input;
             else debug_key_buffer[debug_ctr - 128] <= serial_input;
 

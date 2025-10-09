@@ -34,7 +34,7 @@ module aes_ctr_drbg #(
   input  logic [SEED_BITS-1:0]      additional_input_i,
 
   // Outputs
-  output logic                      busy_o,
+//   output logic                      busy_o,
   output logic                      done_o,           // pulses when op completes
   output logic                      random_valid_o,   // pulses with each 128b random block
   output logic [BLOCK_BITS-1:0]     random_block_o
@@ -146,7 +146,7 @@ always_comb begin
     temp0_n             = temp0_reg;
     temp1_n             = temp1_reg;
 
-    busy_o              = (state != S_IDLE);
+    // busy_o              = (state != S_IDLE);
 
     // AES defaults
     aes_in_valid        = 1'b0;

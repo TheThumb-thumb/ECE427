@@ -81,7 +81,7 @@ always_ff @ (posedge slow_clk) begin
             endcase
         end else if(current_state == OUTPUT_BYTES) begin
             byte_counter <= byte_counter - 1'b1;
-        end else if(current_state == DONE) begin
+        end else if(current_state == OUTPUT_DONE) begin
             
         end
 

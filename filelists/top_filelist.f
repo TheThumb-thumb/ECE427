@@ -22,4 +22,8 @@ $TOP_DIR/hdl/control.sv
 $TOP_DIR/hdl/oht_sram_mux.sv
 $TOP_DIR/hdl/entropy_oht_mux.sv
 
+$TOP_DIR/hdl/trivium.sv
+$TOP_DIR/hdl/trivium_top.sv
+
+
 $TOP_DIR/hdl/output_buffer.sv

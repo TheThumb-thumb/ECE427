@@ -31,7 +31,7 @@ module spi
 
     // FSM state transition logic (sequential)
     // This process updates the current state on the rising edge of the SPI clock.
-    always_ff @(posedge sclk or negedge rst_n) begin
+    always_ff @(posedge sclk) begin
         if (!rst_n)
             curr_state <= IDLE;
         else
@@ -55,7 +55,7 @@ module spi
                 // The transaction ends when all bits are transferred OR
                 // if the master deselects the slave prematurely.
                 miso = tx_shifter[21];
-                if (bit_cnt == 5'd21 || ss_n) begin
+                if (bit_cnt == 5'd22 || ss_n) begin
                     next_state = IDLE;
                 end
             end
@@ -63,7 +63,7 @@ module spi
     end
 
     // Data path and output logic (sequential)
-    always_ff @(posedge sclk or negedge rst_n) begin
+    always_ff @(posedge sclk) begin
         if (!rst_n) begin
             bit_cnt <= '0;
             rx_shifter <= '0;
@@ -81,13 +81,17 @@ module spi
                         tx_shifter <= data_to_send;
                     end
                     // When a new transaction starts, reset the bit counter
-                    if (next_state == TRANSMIT) begin
-                        bit_cnt <= '0;
-                    end
+                    bit_cnt <= '0;
+
                 end
 
                 TRANSMIT: begin
-                    if (!ss_n) begin
+                    if (bit_cnt == 5'd22) begin
+                        rx_shifter <= 22'd0;
+                        tx_shifter <= 22'd0;
+                    end
+                    
+                    else begin
                         bit_cnt <= bit_cnt + 1;
                         // Shift in data from the master on MOSI
                         rx_shifter <= {rx_shifter[20:0], mosi};

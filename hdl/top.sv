@@ -26,8 +26,10 @@ module top (
     input logic debug_clk,  // Debug clock from FPGA
     input logic mosi,       // Master Out Slave In
     output logic miso,      // Master In Slave Out
+    output logic spi_data_ready, //This will be useful for SPI communication
 
     input logic debug,      // Debug pin (active high)
+    input logic output_to_input_direct, // Used when we want to bypass a module internally
 
     // Serial I/O for debug
     output logic output_pin_2,
@@ -35,13 +37,13 @@ module top (
     input logic input_pin_1,
 
     // //Temp pins for verification (no output buffer or entropy)
-    input logic [es_sources-1:0] entropy_source_array
+    input logic [es_sources-1:0] entropy_source_array,
     // output logic [256:0] temp_seed_out,
     // output logic [127:0] temp_drbg_out,
     // output logic temp_out_valid
     output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
-    output logic [jitter_sources-1:0] jitter_disable_arr;
+    output logic [jitter_sources-1:0] jitter_disable_arr
 
 );
 
@@ -57,7 +59,7 @@ module top (
     logic [(DATA_WIDTH/2)-1:0] key;
 
     //Connections between Conditioner and DRBG
-    logic cond_drbg_valid, cond_drbg_ready;
+    logic cond_drbg_valid, cond_drbg_ready, cond_triv_ready, cond_triv_valid;
     logic [DATA_WIDTH-1:0] seed;
 
     //Connections between Conditioner and Output Buffer
@@ -70,7 +72,7 @@ module top (
     logic drbg_random_valid;
     logic [127:0] drbg_random_block;
 
-    // Wires to connect control to other modules
+    // Wires to connect control to other modules (from control)
     logic        clk;
     logic        latch_entropy_mux_out; // Serial debug output from selected latch entropy source
     logic        jitter_entropy_mux_out; // Serial debug output from selected latch entropy source
@@ -79,19 +81,12 @@ module top (
     logic        jitter_oht_mux_out; // Serial debug output from selected jitter OHT
     logic        latch_oht_mux_in; // Serial debug input to selected latch OHT
     logic        jitter_oht_mux_in; // Serial debug input to selected jitter OHT
-    logic [8:0]  calibration_step; // Calibration step size to use
-    logic        latch_sram_mux_out; // Serial debug output from selected latch SRAM address
-    logic        jitter_sram_mux_out; // Serial debug output from selected jitter SRAM address
-    logic        latch_sram_mux_in; // Serial debug input to selected latch SRAM address
-    logic        jitter_sram_mux_in; // Serial debug input to selected jitter SRAM address
-    logic        conditioner_mux_output;  // Serial debug output from selected conditioner
-    logic        conditioner_mux_input; // Serial debug input to selected conditioner
-    logic        DRBG_mux_output; // Serial debug output from selected DRBG
-    logic        DRBG_mux_input;  // Serial debug input to selected DRBG
+    logic        CTD_debug_input; // Serial debug input to conditioner/trivium/DRBG
     logic [13:0] temp_counter_0, temp_counter_1, temp_counter_2, temp_counter_3; // Counters for temp sensors, verify w Anthony
     logic [13:0] temp_threshold_0, temp_threshold_1, temp_threshold_2, temp_threshold_3; // Thresholds for temp sensors
     logic        temp_sense_0_good, temp_sense_1_good, temp_sense_2_good, temp_sense_3_good; // Single bit boolean good/bad for temp sensor
-    logic [24:0] curr_state; // Contains all the info for 
+    logic [15:0] lower_latch_entropy_good, upper_latch_entropy_good, lower_jitter_entropy_good, upper_jitter_entropy_good;
+    logic [21:0] curr_state; // Contains all the info for 
 
     // MUX port declarations
     logic [31:0] latch_entropy_sources_out, 
@@ -115,37 +110,46 @@ module top (
         .mosi(mosi),
         .ss_n(ss_n),
         .debug(debug),
-        .input_pin_1(input_pin_1),
+
         .miso(miso),
         .output_pin_2(output_pin_2),
         .output_pin_1(output_pin_1),
+        .input_pin_1(input_pin_1),
+        .output_to_input_direct(output_to_input_direct),
+        .spi_data_ready(spi_data_ready),
+
         .clk(clk), // This is the new system clock (muxed between ic_clk and debug_clk pins)
+        
         .latch_entropy_mux_out(latch_entropy_mux_out), // Serial output from selected latch entropy source
         .jitter_entropy_mux_out(jitter_entropy_mux_out), // Serial debug output from selected latch entropy source
+                
         .entropy_calibration(entropy_calibration), // Entropy calibration value for debug
-        .latch_oht_mux_out(latch_oht_mux_out),  // Serial debug output from selected latch OHT
-        .jitter_oht_mux_out(jitter_oht_mux_out), // Serial debug output from selected jitter OHT
+
         .latch_oht_mux_in(latch_oht_mux_in),  // Serial debug input to selected latch OHT
         .jitter_oht_mux_in(jitter_oht_mux_in),  // Serial debug input to selected jitter OHT
-        .calibration_step(calibration_step),  // Calibration step size to use
-        .latch_sram_mux_out(latch_sram_mux_out), // Serial debug output from selected latch SRAM address
-        .jitter_sram_mux_out(jitter_sram_mux_out),  // Serial debug output from selected jitter SRAM address
-        .latch_sram_mux_in(latch_sram_mux_in), // Serial debug input to selected latch SRAM address
-        .jitter_sram_mux_in(jitter_sram_mux_in),  // Serial debug input to selected jitter SRAM address
-        .conditioner_mux_input(conditioner_mux_input), // Serial debug input to selected conditioner
-        .DRBG_mux_input(DRBG_mux_input), // Serial debug input to selected DRBG
+        
+        .CTD_debug_input(CTD_debug_input), // Input to MUX into the conditioner, trivium, DRBG
+
         .temp_counter_0(temp_counter_0),  // Counters for temp sensors
         .temp_counter_1(temp_counter_1),
         .temp_counter_2(temp_counter_2),
         .temp_counter_3(temp_counter_3),
+
         .temp_threshold_0(temp_threshold_0),  // Thresholds for temp sensors
         .temp_threshold_1(temp_threshold_1),
         .temp_threshold_2(temp_threshold_2),
         .temp_threshold_3(temp_threshold_3),
+
         .temp_sense_0_good(temp_sense_0_good), // Single bit boolean good/bad for temp sensor
         .temp_sense_1_good(temp_sense_1_good),
         .temp_sense_2_good(temp_sense_2_good),
         .temp_sense_3_good(temp_sense_3_good),
+
+        .lower_latch_entropy_good(lower_latch_entropy_good),
+        .upper_latch_entropy_good(upper_latch_entropy_good),
+        .lower_jitter_entropy_good(lower_jitter_entropy_good),
+        .upper_jitter_entropy_good(upper_jitter_entropy_good),
+
         .curr_state(curr_state)
     );
 
@@ -153,11 +157,11 @@ module top (
     logic [5:0] output_select_latch_entropy_oht;
     logic [5:0] input_select_latch_entropy_oht;
     always_comb begin
-        if (curr_state[23:21] == 3'd1) output_select_latch_entropy_oht = {1'b1, curr_state[20:16]};
-        else if (curr_state[15:13] == 3'd1) output_select_latch_entropy_oht = {1'b1, curr_state[12:8]};
+        if (curr_state[20:19] == 3'd1) output_select_latch_entropy_oht = {1'b1, curr_state[20:19]};
+        else if (curr_state[13:12] == 3'd1) output_select_latch_entropy_oht = {1'b1, curr_state[11:7]};
         else output_select_latch_entropy_oht = 6'b0; // Default value when neither condition is true
 
-        if (curr_state[7:5] == 3'd1) input_select_latch_entropy_oht = {1'b1, curr_state[4:0]};
+        if (curr_state[6:5] == 3'd1) input_select_latch_entropy_oht = {1'b1, curr_state[4:0]};
         else input_select_latch_entropy_oht = 6'b0;
 
     end
@@ -175,13 +179,13 @@ module top (
     logic [5:0] output_select_jitter_entropy_oht;
     logic [5:0] input_select_jitter_entropy_oht;
     always_comb begin
-        if (curr_state[23:21] == 3'd2) output_select_jitter_entropy_oht = {1'b1, curr_state[20:16]};
+        if (curr_state[20:19] == 3'd2) output_select_jitter_entropy_oht = {1'b1, curr_state[18:14]};
 
-        else if (curr_state[15:13] == 3'd2) output_select_jitter_entropy_oht = {1'b1, curr_state[12:8]};
+        else if (curr_state[13:12]== 3'd2) output_select_jitter_entropy_oht = {1'b1, curr_state[11:7]};
  
         else output_select_jitter_entropy_oht = 6'b0; // Default value when neither condition is true
 
-        if (curr_state[7:5]==3'd2) input_select_jitter_entropy_oht = {1'b1, curr_state[4:0]};
+        if (curr_state[6:5]==3'd2) input_select_jitter_entropy_oht = {1'b1, curr_state[4:0]};
         else input_select_jitter_entropy_oht = 6'b0;
 
     end
@@ -196,54 +200,6 @@ module top (
         .oht_in              (jitter_oht_default_in)             // Input pins to Jitter OHT
     );
 
-
-    logic [5:0] output_select_latch_oht_sram;
-    logic [5:0] input_select_latch_oht_sram;
-    always_comb begin
-        if (curr_state[23:21] == 3'd3) output_select_latch_oht_sram = {1'b1, curr_state[20:16]};
-
-        else if (curr_state[15:13] == 3'd3) output_select_latch_oht_sram = {1'b1, curr_state[12:8]};
- 
-        else output_select_latch_oht_sram = 6'b0; // Default value when neither condition is true
-
-        if (curr_state[7:5]==3'd3) input_select_latch_oht_sram = {1'b1, curr_state[4:0]};
-        else input_select_latch_oht_sram=6'b0;
-    end
-    
-    // Mux between latch OHTs and SRAM
-    oht_sram_mux latch_oht_sram_mux (
-        .debug          (debug),
-        .oht_outputs    (latch_oht_default_out),
-        .sram_mux_in    (latch_sram_mux_in),
-        .output_select  (output_select_latch_oht_sram), //Cell select plus extra high bit for module select
-        .input_select   (input_select_latch_oht_sram), //Cell select plus extra high bit for module select
-        .oht_mux_out    (latch_oht_mux_out),
-        .sram_in        (latch_sram_default_in) // Latch SRAM input
-    );
-
-    logic [5:0] output_select_jitter_oht_sram;
-    logic [5:0] input_select_jitter_oht_sram;
-    always_comb begin
-        if (curr_state[23:21] == 3'd4) output_select_jitter_oht_sram = {1'b1, curr_state[20:16]};
-
-        else if (curr_state[15:13] == 3'd4) output_select_jitter_oht_sram = {1'b1, curr_state[12:8]};
- 
-        else output_select_jitter_oht_sram = 6'b0; // Default value when neither condition is true
-
-        if (curr_state[7:5]==3'd4) input_select_jitter_oht_sram = {1'b1, curr_state[4:0]};
-        else input_select_jitter_oht_sram=6'b0;
-    end
-
-    // Mux between jitter OHTs and SRAM
-    oht_sram_mux jitter_oht_sram_mux (
-        .debug          (debug),
-        .oht_outputs    (jitter_oht_default_out),
-        .sram_mux_in    (jitter_sram_mux_in),
-        .output_select  (output_select_jitter_oht_sram), //Cell select plus extra high bit for module select
-        .input_select   (input_select_jitter_oht_sram), //Cell select plus extra high bit for module select
-        .oht_mux_out    (jitter_oht_mux_out),
-        .sram_in        (jitter_sram_default_in) // Jitter SRAM input
-    );
 
     // Instantiate the OHT
     oht_top oht_inst_0 (
@@ -264,8 +220,15 @@ module top (
         .j_disable_arr(jitter_disable_arr)
     );
 
-    // Instantiate the Conditioner
+    logic [1:0] CTD_serial_sel;
+    logic conditioner_debug;
+    logic trivium_debug;
+    logic drbg_debug;
+    logic parallelizer_data_valid_out;
+    logic [383:0] debug_parallel_out;
 
+
+    // Instantiate the Conditioner
     conditioner #(
         .DATA_WIDTH(256)
     ) conditioner_0  (
@@ -277,7 +240,7 @@ module top (
         .oht_valid_i(oht_cond_valid),
         .oht_ready_o(oht_cond_ready),
 
-        .drbg_ready_i(cond_drbg_ready),
+        .drbg_ready_i(cond_drbg_ready || cond_triv_ready),
         .drbg_valid_o(cond_drbg_valid),
 
         .rdseed_ready_i(cond_output_ready),
@@ -289,14 +252,28 @@ module top (
         .seed_o(seed),
 
         //Debug control signals and data ports
-        .debug(debug),
-        .serial_input(conditioner_mux_input),
+        .debug(debug), // Change this toc onditioner_debug??
+        .serial_input(CTD_debug_input),
         .debug_register(curr_state[7:0])
     );
 
+    logic triv_gen;
+    logic [7:0] triv_out;
+    //Instantiate Trivium:
+    trivium_top tri_state ( // NEEDS trivium_debug
+        .clk(clk),
+        .rst(~rst_n),
+
+        .cond_in(seed),
+        .cond_valid(cond_drbg_valid),
+
+        .seed_req(cond_triv_ready),
+        .triv_ready(triv_gen),
+        .rrand_out(triv_out)
+    );
 
     //Instantiate the DRBG w/ wrapper
-    ctr_drbg_wrapper #(
+    ctr_drbg_wrapper #( // needs drbg_debug
         .KEY_BITS (128),
         .DATA_WIDTH (256),
         .RESEED_INTERVAL (511)
@@ -307,25 +284,21 @@ module top (
         // conditioner handshake
         .drbg_ready_o        (cond_drbg_ready),        // -> conditioner
         .drbg_valid_i        (cond_drbg_valid),        // <- conditioner
-        .seed_i              (seed),                   // <- conditioner
+        .seed_i              (seed),                   // <- conditioner 
 
         // commands froM control
         .instantiate_i       (drbg_instantiate),
         .reseed_i            (drbg_reseed),
         .generate_i          (drbg_generate),
-        .num_blocks_i        (drbg_num_blocks),
+        .num_blocks_i        (16'd511),
 
         // random output blocks streamin out
         .random_valid_o      (drbg_random_valid),
         .random_block_o      (drbg_random_block)
+        // .busy_o(),       // drbg not idle
+        // .buffer_ready() // from output buffer
     );
-
-    // temp signals pretending to be the buffer
-    // assign cond_output_ready = 1'b1;
-    // assign temp_out_valid = cond_output_valid || drbg_random_valid;
-    // assign temp_seed_out = seed;
-    // assign temp_dbrbg_out = drbg_random_block;
-
+    
     // Instantiate the output buffer
     output_buffer #(
         .DATA_LENGTH(256),

@@ -6,24 +6,22 @@ logic clk, rst;
 initial clk = 1'b0;
 always #1ns clk = ~clk;
 initial rst = 1'b0;
-
-    // input  logic clk,
-    // input  logic rst,
-    // input  logic [IV_WIDTH-1:0] iv_,
-    // input  logic [KEY_WIDTH-1:0] key_,
-
-    // input  trivium_state_t state,
-
-    // output logic [7:0] byte_stream,
-    // output logic done
     
     logic [DATA_WIDTH-1:0] cond_in;
-    logic cond_valid, stall, seed_req, triv_ready;
+    logic cond_valid, seed_req, triv_ready;
+    // stall, 
     logic [7:0] rrand_out;
+    // logic rrand_out;
 
-    assign cond_in = {$urandom(), $urandom(), $urandom(), $urandom(), $urandom()};
+    // assign cond_in = {$urandom(), $urandom(), $urandom(), $urandom(), $urandom()};
+    assign cond_in = 256'h2fd9a2acf377581d8ba1adbf131ab2c93aae165d;
+
+    // assign cond_in = 256' 
+    // 2fd9a2acf377581d8ba1    IV  H2FD
+    // adbf131ab2c93aae165d      KEY
+    // adbf131ab2c93aae165d 2fd9a2acf377581d8ba1 64
     assign cond_valid = '1;
-    assign stall = 1'b0;
+    // assign stall = 1'b0;
 
     trivium_top dut (
         .clk(clk),
@@ -31,7 +29,7 @@ initial rst = 1'b0;
 
         .cond_in(cond_in),
         .cond_valid(cond_valid),
-        .stall(stall),
+        // .stall(stall),
 
         .seed_req(seed_req),
         .triv_ready(triv_ready),
@@ -39,18 +37,18 @@ initial rst = 1'b0;
     );
 
 	initial begin
-		$fsdbDumpfile("tri_dump.fsdb");
+		$fsdbDumpfile("trivium_dump.fsdb");
 		$fsdbDumpvars(0, "+all");
 		rst = 1'b1;
         #10ns
 		rst = 1'b0;
-		#10000ns
+		#1000000ns
 		$finish();
 	end
 
     initial begin
         integer bytes_captured;
-        integer bytes_to_capture = 1024; // Capture 1KB of data
+        integer bytes_to_capture = 1000000; // Capture 1KB of data
         integer outfile;
         // --- Test Setup ---
         // Open a text file for writing (will be overwritten on each run)
@@ -61,8 +59,8 @@ initial rst = 1'b0;
         end
 
         // Setup waveform dumping for debugging
-        $fsdbDumpfile("trivium_dump.fsdb");
-        $fsdbDumpvars(0, trivium_tb, "+all");
+        // $fsdbDumpfile("trivium_dump.fsdb");
+        // $fsdbDumpvars(0, "+all");
 
         // --- Test Execution ---
         // Wait for reset to complete

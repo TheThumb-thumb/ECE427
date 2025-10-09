@@ -12,7 +12,7 @@ module top_tb;
 	//CPU IO 
 	logic rand_req, rand_valid;
 	logic [7:0] rand_byte;
-	logic [2:0] rand_req_type;
+	rand_req_t rand_req_type;
 
 	//SPI
 	logic ss_n, mosi, miso;
@@ -39,28 +39,30 @@ module top_tb;
 		.debug_clk(top_clk),
 		.mosi(mosi),
 		.miso(miso),
+		.spi_data_ready(),
 
 		.debug(debug),
+		.output_to_input_direct(1'b0),
 
-		.output_pin_2(input_pin_1),
+		.output_pin_2(output_pin_2),
 		.output_pin_1(output_pin_1),
-		.input_pin_1(output_pin_2)
+		.input_pin_1(input_pin_1),
 
-		// .entropy_source_array(entropy_source_array),
-		// .temp_seed_out(temp_seed_out),
-		// .temp_drbg_out(temp_drbg_out),
-		// .temp_out_valid(temp_out_valid)
+		.entropy_source_array(entropy_source_array),
+		.arr_n(),
+		.arr_p(),
+		.jitter_disable_arr()
 		
 	);
 
 	initial begin
 		debug = 1'b0;
+		rand_req = 1'b1;
+		rand_req_type = RDSEED_64;
 		forever begin 
 			@(posedge top_clk);
 			entropy_source_array = { $urandom, $urandom };
 		end
-		rand_req = 1'b1;
-		rand_req_type = RDSEED_64;
 	end
 
 	//Drive reset and log signals

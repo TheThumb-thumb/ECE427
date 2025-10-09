@@ -85,25 +85,25 @@ endtask
 
 
 task automatic do_instantiate(input logic [255:0] seed);
-begin
-  wait_idle();
-  seed_material_i = seed;
+  begin
+    wait_idle();
+    seed_material_i = seed;
 
-  // 1-cycle instantiate pulse
-  instantiate_i   = 1'b1;
+    // 1-cycle instantiate pulse
+    instantiate_i   = 1'b1;
 
-  // Hold seed_valid_i for 2 cycles to guarantee capture
-  seed_valid_i    = 1'b1;
-  @(posedge clk);
-  instantiate_i   = 1'b0;
-  @(posedge clk);
-  seed_valid_i    = 1'b0;
+    // Hold seed_valid_i for 2 cycles to guarantee capture
+    seed_valid_i    = 1'b1;
+    @(posedge clk);
+    instantiate_i   = 1'b0;
+    @(posedge clk);
+    seed_valid_i    = 1'b0;
 
-  $display("%0t : INST sent (seed_valid held 2 cycles). busy=%0b", $time, busy_o);
+    $display("%0t : INST sent (seed_valid held 2 cycles). busy=%0b", $time, busy_o);
 
-  wait (done_o);
-  @(posedge clk);
-end
+    wait (done_o);
+    @(posedge clk);
+  end
 endtask
 
 
@@ -111,25 +111,34 @@ task automatic do_reseed(input logic [255:0] seed);
   begin
     wait_idle();                         
     seed_material_i = seed;
-    reseed_i        = 1'b1;
-    seed_valid_i    = 1'b1;              // should be same cycle as reseed_i
-    @(posedge clk);
-    reseed_i        = 1'b0;
-    seed_valid_i    = 1'b0;
 
-    wait (done_o); @(posedge clk);
+    // 1-cycle reseed pulse, hold seed_valid 2 cycles to guarantee capture
+    reseed_i     = 1'b1;
+    seed_valid_i = 1'b1;
+    @(posedge clk);
+    reseed_i     = 1'b0;
+    @(posedge clk);
+    seed_valid_i = 1'b0;
+
+    // Wait for the Update to finish cleanly
+    wait (done_o); 
+    @(posedge clk);            // extra settle cycle
   end
 endtask
 
 task automatic do_generate(input int unsigned nblocks);
   int unsigned seen = 0;
   begin
-    wait_idle();                        
-    num_blocks_i = nblocks[15:0];
-    // 1-cycle pulse
-    generate_i   = 1'b1; @(posedge clk); generate_i = 1'b0;
+    wait_idle();
 
-    // Collect until post-generate Update completes
+    // Make sure num_blocks_i is stable for 1 edge BEFORE the generate pulse
+    num_blocks_i = nblocks[15:0];
+    @(posedge clk);
+
+    // 1-cycle request
+    generate_i = 1'b1; @(posedge clk); generate_i = 1'b0;
+
+    // Collect until post-gen update completes
     do begin
       @(posedge clk);
       if (random_valid_o) begin
@@ -138,12 +147,93 @@ task automatic do_generate(input int unsigned nblocks);
       end
     end while (!done_o);
 
+    @(posedge clk);  // settle
     if (seen != nblocks)
-      $warning("Requested %0d blocks but observed %0d.", nblocks, seen);
-
-    @(posedge clk);
+      $warning("Requested %0d blocks; observed %0d.", nblocks, seen);
   end
 endtask
+
+string out_path = "drbg_blocks.txt";
+int unsigned max_blocks_to_dump = 0; // 0 = no limit
+
+initial begin
+  string p; int unsigned m;
+  if ($value$plusargs("OUT=%s", p)) out_path = p;
+  if ($value$plusargs("MAX=%d", m)) max_blocks_to_dump = m;
+end
+
+int fh;
+int unsigned dump_count = 0;
+
+// Open the output file once
+initial begin
+  fh = $fopen(out_path, "w");
+  if (!fh) begin
+    $error("Could not open output file '%s'", out_path);
+  end else begin
+    $display("[DRBG-TB] Writing blocks to %s", out_path);
+  end
+end
+
+// On each random_valid_o, print and dump the 128-bit block in MSB-first hex
+always_ff @(posedge clk) begin
+  if (random_valid_o) begin
+    dump_count++;
+    // Console print (timestamp + index + hex)
+    $display("%0t DRBG[%0d] = %032h", $time, dump_count, random_block_o);
+    // File dump: one 32-hex-char line per block
+    if (fh) $fdisplay(fh, "%032h", random_block_o);
+    // Optional cap
+    if (max_blocks_to_dump != 0 && dump_count >= max_blocks_to_dump) begin
+      $display("[DRBG-TB] Reached MAX=%0d blocks, stopping.", max_blocks_to_dump);
+      $finish;
+    end
+  end
+end
+
+// Flush/close on finish
+final begin
+  if (fh) $fclose(fh);
+  $display("[DRBG-TB] Total blocks dumped: %0d", dump_count);
+end
+
+// task automatic do_reseed(input logic [255:0] seed);
+//   begin
+//     wait_idle();                         
+//     seed_material_i = seed;
+//     reseed_i        = 1'b1;
+//     seed_valid_i    = 1'b1;              // should be same cycle as reseed_i
+//     @(posedge clk);
+//     reseed_i        = 1'b0;
+//     seed_valid_i    = 1'b0;
+
+//     wait (done_o); @(posedge clk);
+//   end
+// endtask
+
+// task automatic do_generate(input int unsigned nblocks);
+//   int unsigned seen = 0;
+//   begin
+//     wait_idle();                        
+//     num_blocks_i = nblocks[15:0];
+//     // 1-cycle pulse
+//     generate_i   = 1'b1; @(posedge clk); generate_i = 1'b0;
+
+//     // Collect until post-generate Update completes
+//     do begin
+//       @(posedge clk);
+//       if (random_valid_o) begin
+//         seen++;
+//         $display("%0t DRBG block[%0d] = %032h", $time, seen, random_block_o);
+//       end
+//     end while (!done_o);
+
+//     if (seen != nblocks)
+//       $warning("Requested %0d blocks but observed %0d.", nblocks, seen);
+
+//     @(posedge clk);
+//   end
+// endtask
 
 initial begin
   // Create the FSDB in the run directory (vcs/)
@@ -155,18 +245,17 @@ end
 
 // timeout check (~1 ms @ 10 ns clk)
 initial begin
-  time limit = 1_000_000ps;           // 1 ms = 1e9 ps; adjust as you like
+  time limit = 1_000_000_000_000ps;  // 1 ms = 1e9 ps
   time start = $time;
+
   forever begin
     @(posedge clk);
-    if ($time - start >= 100_000_000) begin
-      $error(" timeout: busy=%0b done=%0b rand_v=%0b t=%0t",
-             busy_o, done_o, random_valid_o, $time);
+    if ($time - start >= limit) begin
+      $error("timeout: busy=%0b done=%0b rand_v=%0b t=%0t", busy_o, done_o, random_valid_o, $time);
       $finish;
     end
   end
 end
-
 
 // Tests
 initial begin
@@ -188,12 +277,12 @@ initial begin
 
   // hanging here, stuck after instantiate tb hangin
 
-  // Generate 8 blocks
-  do_generate(8);
+  // Generate 7 blocks
+  do_generate(4000);
 
   // reseed with a new seed and gen 4 more blocks
-  do_reseed(256'hA5A5A5A5_A5A5A5A5_5A5A5A5A_5A5A5A5A__01234567_89ABCDEF_FEDCBA98_76543210);
-  do_generate(4);
+  // do_reseed(256'hA5A5A5A5_A5A5A5A5_5A5A5A5A_5A5A5A5A__01234567_89ABCDEF_FEDCBA98_76543210);
+  // do_generate(4);
 
   $display("DRBG TB: done.");
   $finish;

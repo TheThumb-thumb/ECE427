@@ -27,13 +27,8 @@ module control (
     output logic latch_oht_mux_in, // Latch OHT Mux input
     output logic jitter_oht_mux_in, // Jitter OHT Mux input
 
-    output logic [8:0] calibration_step, // This is the % per LSB value
-
-    // AES CBC MAC CONNECTIONS
-    output logic conditioner_debug_input, // Input to MUX into the conditioner
-
-    // DRBG CONNECTIONS
-    output logic DRBG_debug_input, // Input to DRBG
+    // AES CBC MAC, TRIVIUM, DRBG CONNECTIONS
+    output logic CTD_debug_input, // Input to MUX into the conditioner, trivium, DRBG
 
     // TEMPERATURE SENSOR CONNECTIONS (this might change depending on Anthony's counter implementation)
     input logic [13:0] temp_counter_0, // Temp sensor 0 counter 
@@ -46,12 +41,12 @@ module control (
     output logic [13:0] temp_threshold_2, // Temp sensor 2 threshold
     output logic [13:0] temp_threshold_3,  // Temp sensor 3 threshold
 
-    input logic temp_sense_0_good,
+    input logic temp_sense_0_good, // States of temp sensors (good/bad)
     input logic temp_sense_1_good,
     input logic temp_sense_2_good,
     input logic temp_sense_3_good,
 
-    input logic [15:0] lower_latch_entropy_good,
+    input logic [15:0] lower_latch_entropy_good, // States of entropy sources (good/bad)
     input logic [15:0] upper_latch_entropy_good,
     input logic [15:0] lower_jitter_entropy_good,
     input logic [15:0] upper_jitter_entropy_good,
@@ -116,26 +111,7 @@ module control (
 
     // ---------------------------------------------------------
 
-    // Clock Mux and State Update
-    assign clk = debug ? debug_clk : ic_clk;
-
-    always_comb begin : state_logic
-        if (!temp_sense_0_good || !temp_sense_1_good || !temp_sense_2_good || !temp_sense_3_good)
-            next_state = HALT_STATE;
-        else if (debug)
-            next_state = debug_state;
-        else
-            next_state = DEFAULT_STATE;
-    end
-
-    always_comb begin
-        if (write_debug_state)
-            debug_state = new_debug_state_value;
-        else debug_state = curr_state;
-    end
-
-    always_ff @(posedge clk) begin : state_register
-        curr_state <= next_state;
+    always_ff @(posedge clk) begin : internal_register_update
         internal_temp_counter_0 <= temp_counter_0; // Update internal temp counter
         internal_temp_counter_1 <= temp_counter_1; // Update internal temp counter
         internal_temp_counter_2 <= temp_counter_2; // Update internal temp counter
@@ -147,28 +123,54 @@ module control (
         internal_upper_jitter_entropy_good <= upper_jitter_entropy_good; // Update entropy source status
     end 
 
+    // Broadcast values from registers
+    always_comb begin
+        entropy_calibration = internal_entropy_calibration;
 
+        temp_threshold_0 = internal_temp_threshold_0;
+        temp_threshold_1 = internal_temp_threshold_1;
+        temp_threshold_2 = internal_temp_threshold_2;
+        temp_threshold_3 = internal_temp_threshold_3;
+
+    end
+
+    // Clock Mux
+    assign clk = debug ? debug_clk : ic_clk;
+
+    // State comb
+    always_comb begin : state_logic
+        if (!temp_sense_0_good || !temp_sense_1_good || !temp_sense_2_good || !temp_sense_3_good)
+            next_state = HALT_STATE;
+        else if (debug && write_debug_state)
+            next_state = new_debug_state_value;
+        else
+            next_state = curr_state;
+    end
+    
     always_ff @(posedge clk) begin  //Mostly everything
         if (!rst_n) begin
             curr_state <= DEFAULT_STATE;
-            internal_entropy_calibration <= 15'b1100_0000_1100_0000;
+            internal_entropy_calibration <= 16'b1100_0000_1100_0000;
             internal_temp_threshold_0 <= 14'b0;
             internal_temp_threshold_1 <= 14'b0;
             internal_temp_threshold_2 <= 14'b0;
             internal_temp_threshold_3 <= 14'b0;
-            send_trigger <= 1'b0;
             data_to_send <= 21'h0;
             write_debug_state <= 1'b0;
             new_debug_state_value <= 21'b0;
+            send_trigger <= 1'b0;
+
         end
         else begin
+            curr_state <= next_state;
+            send_trigger <= 1'b0;
+
             if (spi_data_ready && debug) begin
                 // Bit 21: 1=Register Operation (Read/Write), 0=Mux Select Operation
                 if (spi_data[21]) begin 
                     write_debug_state <= 1'b0;
                     // Bit 20: 1=Read Operation, 0=Write Operation
                     if (spi_data[20]) begin // Read operation 
-                        send_trigger <= 1'b1; // Flag to send data back
                         case (spi_data[19:16]) // Register Address
                             4'h0: data_to_send <= {1'b0, DEFAULT_STATE}; // Default state
                             4'h1: data_to_send <= {1'b0, HALT_STATE};    // Halt state
@@ -190,11 +192,12 @@ module control (
                             4'hD: data_to_send <= {10'h0, internal_temp_counter_1}; // Temp sensor 1 counter (read-only)
                             4'hE: data_to_send <= {10'h0, internal_temp_counter_2}; // Temp sensor 2 counter (read-only)
                             4'hF: data_to_send <= {10'h0, internal_temp_counter_3}; // Temp sensor 3 counter (read-only)
-
+            
                             default: data_to_send <= 22'hED_BEF; // Invalid Address
                         endcase
+                        send_trigger <= 1'b1;
                     end
-                    
+                      
                     else begin // Write operation
                         case (spi_data[19:16]) // Register Address                // This is a synchronous write since it affects the main FSM, but we treat it as an immediate update
                     // The main state machine will select debug_state on the next clock edge if 'debug' is high.
@@ -274,6 +277,7 @@ module control (
     end
 
     // This selects whether we are bypassing a module i.e. use another module's output as input to one further down the datapath
+    // input_bypass_mux_out will be muxed to the module select mux
     always_comb begin: input_bypass_mux
         if (output_to_input_direct)
             input_bypass_mux_out = output_pin_2;
@@ -289,18 +293,17 @@ module control (
         // This is the input wires to the jitter cell select mux
         jitter_oht_mux_in = 1'b0;
 
-        conditioner_debug_input = 1'b0;
-        DRBG_debug_input = 1'b0;
+        // This is the input to the buffer for conditioner, DRBG, Trivium
+        CTD_debug_input = 1'b0;
 
         if (debug) begin
             case (curr_state[6:5])
 
-                2'b01: latch_oht_mux_in = input_pin_1;
-                2'b10: jitter_oht_mux_in = input_pin_1;
+                2'b01: latch_oht_mux_in = input_bypass_mux_out;
+                2'b10: jitter_oht_mux_in = input_bypass_mux_out;
                 2'b11: begin
                     case (curr_state[4:0])
-                        5'b00000: conditioner_debug_input = input_pin_1;
-                        5'b00001: DRBG_debug_input = input_pin_1;
+                        5'b00000: CTD_debug_input = input_bypass_mux_out;
                         default: ; // do nothing
                     endcase
                 end
