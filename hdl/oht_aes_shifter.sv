@@ -35,7 +35,7 @@ module streaming_bit_compactor #(
     end
 
     // ------------------------------------------
-    // Streaming buffer / output logic (fixed)
+    // Streaming buffer / output logic
     // ------------------------------------------
     always_ff @(posedge clk) begin
         if (rst) begin

@@ -16,10 +16,10 @@ module top (
     input logic rst_n,    // Reset (active low)
 
     //CPU I/O
-    input logic rand_req,               // Request pin (active high)
-    input rand_req_t rand_req_type,    // Request type (see types.sv for scheme) 
-    output logic [7:0] rand_byte,       // Byte-sliced output
-    output logic rand_valid,            // Output valid signal (active high)
+    input logic rand_req,                       // Request pin (active high)
+    input rand_req_t rand_req_type,             // Request type (see types.sv for scheme) 
+    output logic [OUTPUT_WIDTH-1:0] rand_byte,  // Byte-sliced output
+    output logic rand_valid,                    // Output valid signal (active high)
     
     // SPI Pins
     input logic ss_n,       // Slave Select (active low)
@@ -48,6 +48,7 @@ module top (
 );
 
     logic empty;
+    logic [es_sources-1:0] rd_good_arr;
 
     //------------------------------------------------------------------
     // Wire/Reg Instantiations
@@ -200,7 +201,6 @@ module top (
         .oht_in              (jitter_oht_default_in)             // Input pins to Jitter OHT
     );
 
-
     // Instantiate the OHT
     oht_top oht_inst_0 (
         .clk(clk),
@@ -217,7 +217,8 @@ module top (
 
         .arr_n(arr_n),
         .arr_p(arr_p),
-        .j_disable_arr(jitter_disable_arr)
+        .j_disable_arr(jitter_disable_arr),
+        .rd_good_arr(rd_good_arr)
     );
 
     logic [1:0] CTD_serial_sel;
@@ -272,12 +273,39 @@ module top (
         .rrand_out(triv_out)
     );
 
-    //Instantiate the DRBG w/ wrapper
-    ctr_drbg_wrapper #( // needs drbg_debug
+    // //Instantiate the DRBG w/ wrapper
+    // ctr_drbg_wrapper #( // needs drbg_debug
+    //     .KEY_BITS (128),
+    //     .DATA_WIDTH (256),
+    //     .RESEED_INTERVAL (511)
+    // ) u_drbg_rappin (
+    //     .clk                 (clk),
+    //     .rst_n               (rst_n),
+
+    //     // conditioner handshake
+    //     .drbg_ready_o        (cond_drbg_ready),        // -> conditioner
+    //     .drbg_valid_i        (cond_drbg_valid),        // <- conditioner
+    //     .seed_i              (seed),                   // <- conditioner 
+
+    //     // commands froM control
+    //     .instantiate_i       (drbg_instantiate),
+    //     .reseed_i            (drbg_reseed),
+    //     .generate_i          (drbg_generate),
+    //     .num_blocks_i        (16'd511),
+
+    //     // random output blocks streamin out
+    //     .random_valid_o      (drbg_random_valid),
+    //     .random_block_o      (drbg_random_block)
+    //     // .busy_o(),       // drbg not idle
+    //     // .buffer_ready() // from output buffer
+    // );
+    
+
+    ctr_drbg_wrapper #(
         .KEY_BITS (128),
-        .DATA_WIDTH (256),
+        .SEED_WIDTH (256),
         .RESEED_INTERVAL (511)
-    ) u_drbg_rappin (
+    ) u_drbg_rappin(
         .clk                 (clk),
         .rst_n               (rst_n),
 
@@ -286,21 +314,20 @@ module top (
         .drbg_valid_i        (cond_drbg_valid),        // <- conditioner
         .seed_i              (seed),                   // <- conditioner 
 
-        // commands froM control
-        .instantiate_i       (drbg_instantiate),
-        .reseed_i            (drbg_reseed),
-        .generate_i          (drbg_generate),
-        .num_blocks_i        (16'd511),
 
-        // random output blocks streamin out
-        .random_valid_o      (drbg_random_valid),
-        .random_block_o      (drbg_random_block)
-        // .busy_o(),       // drbg not idle
-        // .buffer_ready() // from output buffer
+      // Streaming output to buffer ready/valid   
+      .out_valid_o(drbg_random_valid), // drive buffer valid
+      .out_ready_i(drbg_output_ready), // buffer ready
+      .out_data_o(drbg_random_block), //128b data into buffer
+
+      // unconnected shit
+      .busy_o(),        
+      .blocks_since_reseed_o()
     );
-    
+
     // Instantiate the output buffer
     output_buffer #(
+        .OUTPUT_WIDTH(OUTPUT_WIDTH),
         .DATA_LENGTH(256),
         .RDSEED_QUEUE_LENGTH(8)
     ) output_buffer_inst (

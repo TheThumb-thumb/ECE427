@@ -16,17 +16,18 @@ package params;
     localparam jitter_sources = 32;
     localparam sram_addr = 2048;
     localparam sram_word = 32;
+    localparam OUTPUT_WIDTH = 16;
 endpackage : params
 
 package le_types;
 
     typedef enum logic [2:0] {
-        RDSEED_16 = 3'd0,
-        RDRAND_16 = 3'd1,
-        RDSEED_32 = 3'd2,
-        RDRAND_32 = 3'd3,
-        RDSEED_64 = 3'd4,
-        RDRAND_64 = 3'd5
+        RDSEED_16 = 3'b000,
+        RDRAND_16 = 3'b100,
+        RDSEED_32 = 3'b001,
+        RDRAND_32 = 3'b101,
+        RDSEED_64 = 3'b010,
+        RDRAND_64 = 3'b110
     } rand_req_t;
 
     typedef enum logic [1:0] {
@@ -67,8 +68,7 @@ package le_types;
 
     typedef enum logic [2:0] { 
         OUTPUT_IDLE,
-        OUTPUT_BYTES,
-        OUTPUT_DONE
+        OUTPUT_BYTES
     } output_buffer_state_t;
 
 endpackage: le_types

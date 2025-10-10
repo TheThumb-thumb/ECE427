@@ -12,15 +12,14 @@ import le_types::*;
 
     output logic                        seed_req,      // request new seed after 2048 cycles of use so gives some cycles for buffers to fill up if needed
     output logic                        triv_ready,    // after initial 1152 steps it can start generating so this shows that
-    output logic [7:0]                  rrand_out      // provide 8 random bits to pins if rrand instruction given
-
+    output logic [7:0]                  rrand_out      // provide 8 random bits to pins if rrand instruction give
 );
     trivium_state_t curr_state, next_state;
 
     logic [IV_WIDTH-1:0] iv_, key_;
     logic [159:0] vector;
     logic [10:0] setup_cnt;
-    logic flag;
+    logic flag, done;
 
     trivium rng (
         .clk(clk),
