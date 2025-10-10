@@ -30,26 +30,29 @@ module conditioner #(
     // Debug Control signals
     input logic debug,                          // Debug pin
     input logic serial_input,                   // Input from the FPGA
-    input logic [7:0] debug_register            // SPI register that holds relevant settings to the conditioner's debug mode
+    input logic [6:0] debug_register            // SPI register that holds relevant settings to the conditioner's debug mode
 
 );
 
 logic [(DATA_WIDTH/2)-1:0] debug_key_buffer;
 logic [DATA_WIDTH-1:0] debug_message_buffer;
 logic [8:0] debug_ctr;
+logic debug_cond;
+
+assign debug_cond = (debug_register == 7'b110_0000) ? 1'b1 : 1'b0;
 
 //Normal operation signals
-logic start, done, busy, seed_staged;
+logic start, done, busy, busy_reg, seed_staged;
 logic [DATA_WIDTH-1:0] message;
 logic [(DATA_WIDTH/2)-1:0] key;
 
 always_ff @ (posedge clk) begin
     if(!rst_n) begin
-        busy <= 1'b0;
+        busy_reg <= 1'b0;
         seed_staged <= 1'b0;
     end else begin
-        if(start) busy <= 1'b1;
-        else if(busy && done && (drbg_ready_i || rdseed_ready_i)) busy <= 1'b0;
+        if(start) busy_reg <= 1'b1;
+        else if(busy_reg && done) busy_reg <= 1'b0;
 
         if(done) seed_staged <= 1'b1;
         else if(seed_staged && (drbg_ready_i || rdseed_ready_i)) seed_staged <= 1'b0;
@@ -57,12 +60,16 @@ always_ff @ (posedge clk) begin
 end
 
 always_ff @ (posedge clk) begin
-    if (debug) begin
+    if(!rst_n) begin
+        debug_key_buffer <= '0;
+        debug_message_buffer <= '0;
+        debug_ctr <= '0;
+    end else if (debug) begin
         // if we are in debug mode and the input pin is driving us, serially shift
         // that pins data into the debug registers, starting with the key
-        if(debug_register == 8'b1100_0000) begin 
+        if(debug_cond) begin 
             if(debug_ctr < 128) debug_key_buffer[debug_ctr] <= serial_input;
-            else debug_key_buffer[debug_ctr - 128] <= serial_input;
+            else debug_message_buffer[debug_ctr - 128] <= serial_input;
 
             if(debug_ctr == 9'd384) debug_ctr <= '0;
             else debug_ctr <= debug_ctr + 1'b1;
@@ -82,12 +89,12 @@ always_comb begin
     message = message_i;
 
     //Control outputs
-    oht_ready_o = ~busy;
+    oht_ready_o = ~busy_reg;
     drbg_valid_o = 1'b0;
     rdseed_valid_o = 1'b0;
 
     //We are in debug mode, use the debug buffer and serial input
-    if(debug && debug_register == 8'b1010_0000) begin
+    if(debug && debug_cond) begin
         if(debug_ctr == 9'd384) begin
             start = 1'b1;
             key = debug_key_buffer;
@@ -99,7 +106,7 @@ always_comb begin
         end
     end
 
-    if(oht_ready_o && oht_valid_i && !busy) begin
+    if(oht_ready_o && oht_valid_i && !busy_reg) begin
         start = 1'b1;
     end
 

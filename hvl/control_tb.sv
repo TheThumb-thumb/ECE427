@@ -14,8 +14,7 @@ module control_tb;
     logic        latch_oht_mux_in; // Serial debug input to selected latch OHT
     logic        jitter_oht_mux_in; // Serial debug input to selected jitter OHT
     
-    logic        conditioner_debug_input; // Serial debug input to selected conditionerd
-    logic        DRBG_debug_input;  // Serial debug input to selected DRBG
+    logic        CTD_debug_input; // Serial debug input to conditioner, trivium, or DRBG
 
     logic [13:0] temp_counter_0, temp_counter_1, temp_counter_2, temp_counter_3; // Counters for temp sensors, verify w Anthony
     logic [13:0] temp_threshold_0, temp_threshold_1, temp_threshold_2, temp_threshold_3; // Thresholds for temp sensors
@@ -64,8 +63,7 @@ module control_tb;
         .latch_oht_mux_in(latch_oht_mux_in),  // Serial debug input to selected latch OHT
         .jitter_oht_mux_in(jitter_oht_mux_in),  // Serial debug input to selected jitter OHT
         
-        .conditioner_debug_input(conditioner_debug_input), // Serial debug input to selected conditioner
-        .DRBG_debug_input(DRBG_debug_input), // Serial debug input to selected DRBG
+        .CTD_debug_input(CTD_debug_input), // Serial debug input to conditioner, trivium, or DRBG
         .temp_counter_0(temp_counter_0),  // Counters for temp sensors
         .temp_counter_1(temp_counter_1),
         .temp_counter_2(temp_counter_2),
@@ -334,11 +332,13 @@ module control_tb;
         mosi = 0;
 
 
-        // ---------------- Set input 1 to conditioner mux
+        // ---------------- Set input 1 to conditioner
 
-        // output 1 =vcc, output2 = clk, input 1 -> trivium
-        assign test_word = 22'b0_00_00000_00_00001_11_00001;
-        assign fake_input = 22'b10_1010_1010_1010_1010_1010; // input to be on pin 1
+        // output 1 =vcc, output2 = clk, input 1 -> conditioner
+        assign test_word = 22'b0_00_00000_00_00001_11_00000; // input to conditioner
+        
+        // input to be on pin 1
+        assign conditioner_serial_input = 384'h7b3a9f0e5c6d2814b7f8c9d0a3e5b6f7a8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c2e3f4a5b6c7d8e9f;
 
         // Test passed: 9/29/25
         // Initial states
@@ -374,8 +374,8 @@ module control_tb;
         mosi = 0;
 
         @(posedge clk)
-        for (int i=21; i>=0; i--) begin
-            input_pin_1 = fake_input[i]; // MSB first
+        for (int i=383; i>=0; i--) begin
+            input_pin_1 = conditioner_serial_input[i]; // MSB first
             #10;
         end
 

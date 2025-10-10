@@ -29,7 +29,8 @@ module output_buffer #(
     input logic rand_req,                       // Request pin (active high)
     input rand_req_t rand_req_type,             // Request type (see types.sv for scheme) 
     output logic [OUTPUT_WIDTH-1:0] rand_byte,  // Byte-sliced output
-    output logic rand_valid                     // Output valid signal (active high)
+    output logic rand_valid,                    // Output valid signal (active high)
+    output logic slow_clk
 
 );
 
@@ -54,11 +55,11 @@ logic [2:0] word_counter;
 logic [4:0] global_seed_counter;
 
 //Rdrand buffer stuff
+logic rdrand_buffer_valid;
 logic [127:0] rdrand_buffer;
 logic [$clog2(127/OUTPUT_WIDTH)-1:0] global_rand_counter;
 
 //Need to drive outputs at a slow clock of 100 MHz, or clk/5
-logic slow_clk;
 logic [2:0] div_five_counter;
 always_ff @ (posedge clk) begin
     if(!rst_n) begin
@@ -109,12 +110,13 @@ always_comb begin
 end
 
 //Load the seed queue and rand buffer
-assign rand_ready_o = (global_rand_counter == OUTS_PER_RAND) ? 1'b1 : 1'b0;
+assign rand_ready_o = (global_rand_counter == '0) ? 1'b1 : 1'b0;
 always_ff @ (posedge clk) begin
     if(!rst_n) begin
         for(int i = 0; i < RDSEED_QUEUE_LENGTH; i++) rdseed_queue[i] <= '0;
         seed_queue_head <= '0;
         rdrand_buffer <= '0;
+        rdrand_buffer_valid <= '0;
     end else begin
         if(seed_valid_i && seed_ready_o) begin
             rdseed_queue[seed_queue_head_i] <= seed_port_i;
@@ -123,7 +125,12 @@ always_ff @ (posedge clk) begin
 
         if(rand_valid_i && rand_ready_o) begin
             rdrand_buffer <= rand_port_i;
+            rdrand_buffer_valid <= 1'b1;
         end 
+
+        if(rdrand_buffer_valid && global_rand_counter == OUTS_PER_RAND) begin
+            rdrand_buffer_valid <= 1'b0;
+        end
         
     end
 end
@@ -150,15 +157,16 @@ always_ff @ (posedge slow_clk or negedge rst_n) begin
                 end
             endcase
         end else if(rand_req_reg) begin
-            word_counter <= word_counter - 1;
             if(!rand_req_type_reg[2]) begin
+                word_counter <= word_counter - 1;
                 if(global_seed_counter == OUTS_PER_SEED) begin
                     global_seed_counter <= '0;
                     seed_queue_tail <= seed_queue_tail + 1;
                 end else begin
                     global_seed_counter <= global_seed_counter + 1;
                 end
-            end else begin
+            end else if(rdrand_buffer_valid) begin
+                 word_counter <= word_counter - 1;
                 global_rand_counter <= global_rand_counter + 1;
             end
         end

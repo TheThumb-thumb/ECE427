@@ -20,6 +20,7 @@ module top (
     input rand_req_t rand_req_type,             // Request type (see types.sv for scheme) 
     output logic [OUTPUT_WIDTH-1:0] rand_byte,  // Byte-sliced output
     output logic rand_valid,                    // Output valid signal (active high)
+    output logic slow_clk,                      // Clk/5
     
     // SPI Pins
     input logic ss_n,       // Slave Select (active low)
@@ -255,7 +256,7 @@ module top (
         //Debug control signals and data ports
         .debug(debug), // Change this toc onditioner_debug??
         .serial_input(CTD_debug_input),
-        .debug_register(curr_state[7:0])
+        .debug_register(curr_state[6:0])
     );
 
     logic triv_gen;
@@ -273,37 +274,9 @@ module top (
         .rrand_out(triv_out)
     );
 
-    // //Instantiate the DRBG w/ wrapper
-    // ctr_drbg_wrapper #( // needs drbg_debug
-    //     .KEY_BITS (128),
-    //     .DATA_WIDTH (256),
-    //     .RESEED_INTERVAL (511)
-    // ) u_drbg_rappin (
-    //     .clk                 (clk),
-    //     .rst_n               (rst_n),
-
-    //     // conditioner handshake
-    //     .drbg_ready_o        (cond_drbg_ready),        // -> conditioner
-    //     .drbg_valid_i        (cond_drbg_valid),        // <- conditioner
-    //     .seed_i              (seed),                   // <- conditioner 
-
-    //     // commands froM control
-    //     .instantiate_i       (drbg_instantiate),
-    //     .reseed_i            (drbg_reseed),
-    //     .generate_i          (drbg_generate),
-    //     .num_blocks_i        (16'd511),
-
-    //     // random output blocks streamin out
-    //     .random_valid_o      (drbg_random_valid),
-    //     .random_block_o      (drbg_random_block)
-    //     // .busy_o(),       // drbg not idle
-    //     // .buffer_ready() // from output buffer
-    // );
-    
-
     ctr_drbg_wrapper #(
         .KEY_BITS (128),
-        .SEED_WIDTH (256),
+        .SEED_BITS (256),
         .RESEED_INTERVAL (511)
     ) u_drbg_rappin(
         .clk                 (clk),
@@ -345,7 +318,8 @@ module top (
         .rand_req(rand_req),
         .rand_req_type(rand_req_type),
         .rand_byte(rand_byte),
-        .rand_valid(rand_valid)
+        .rand_valid(rand_valid),
+        .slow_clk(slow_clk)
     );
 
 
