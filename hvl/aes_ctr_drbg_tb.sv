@@ -63,7 +63,7 @@ module ctr_tb;
 
     .additional_input_i(additional_input_i),
 
-    .busy_o            (busy_o),
+    .busy_o            (busy_o),   
     .done_o            (done_o),
     .random_valid_o    (random_valid_o),
     .random_block_o    (random_block_o)

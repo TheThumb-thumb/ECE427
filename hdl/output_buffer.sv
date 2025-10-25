@@ -25,6 +25,10 @@ module output_buffer #(
     input logic [(DATA_LENGTH/2)-1:0]   rand_port_i,
     output logic                        rand_ready_o,
 
+    input logic                         triv_valid_i,
+    input logic [63:0]                  triv_port_i,
+    output logic                        triv_ready_o,
+
     //CPU I/O Pins
     input logic rand_req,                       // Request pin (active high)
     input rand_req_t rand_req_type,             // Request type (see types.sv for scheme) 
@@ -39,12 +43,13 @@ module output_buffer #(
 localparam int OUTS_PER_SEED_WIDTH = (8 - $clog2(OUTPUT_WIDTH) + 1);
 // Width for a value of (128 / OUTPUT_WIDTH)
 localparam int OUTS_PER_RAND_WIDTH = (7 - $clog2(OUTPUT_WIDTH) + 1);
+
 localparam logic [OUTS_PER_SEED_WIDTH:0] OUTS_PER_SEED = (DATA_LENGTH / OUTPUT_WIDTH) - 1;
 localparam logic [OUTS_PER_RAND_WIDTH:0] OUTS_PER_RAND = (128 / OUTPUT_WIDTH) - 1;
 
+
 //Output buffer sampled input registers
-logic rand_req_reg;
-rand_req_t rand_req_type_reg;
+logic rand_req_reg, req_randflag;
 
 //Rdseed queue stuff
 localparam PTR_WIDTH = $clog2(RDSEED_QUEUE_LENGTH);
@@ -56,6 +61,8 @@ logic [4:0] global_seed_counter;
 
 //Rdrand buffer stuff
 logic rdrand_buffer_valid;
+logic [1:0] triv_counter;
+localparam TRIV_INS_PER_BUFFER = (128 / 64);
 logic [127:0] rdrand_buffer;
 logic [$clog2(127/OUTPUT_WIDTH)-1:0] global_rand_counter;
 
@@ -78,13 +85,11 @@ end
 always_ff @ (posedge clk) begin
     if(!rst_n) begin
         rand_req_reg <= '0;
-        rand_req_type_reg <= RDSEED_16;
+        req_randflag <= '0;
     end else if (rand_req) begin
-        rand_req_type_reg <= rand_req_type;
-
+        req_randflag <= rand_req_type[2];
         if(word_counter == 3'd0) rand_req_reg <= 1'b0;
         else if(rand_req_reg == 1'b0) rand_req_reg <= 1'b1;
-
     end
 end
 
@@ -109,27 +114,29 @@ always_comb begin
     end
 end
 
-//Load the seed queue and rand buffer
-assign rand_ready_o = (global_rand_counter == '0) ? 1'b1 : 1'b0;
+//Load the seed queue, rand buffer
+assign rand_ready_o = (global_rand_counter == '0)           ? 1'b1 : 1'b0;
+assign triv_ready_o = (triv_counter < TRIV_INS_PER_BUFFER)  ? 1'b1 : 1'b0;
 always_ff @ (posedge clk) begin
     if(!rst_n) begin
         for(int i = 0; i < RDSEED_QUEUE_LENGTH; i++) rdseed_queue[i] <= '0;
         seed_queue_head <= '0;
         rdrand_buffer <= '0;
-        rdrand_buffer_valid <= '0;
+        triv_counter <= '0;
     end else begin
         if(seed_valid_i && seed_ready_o) begin
             rdseed_queue[seed_queue_head_i] <= seed_port_i;
             seed_queue_head <= seed_queue_head + 1;
         end
 
-        if(rand_valid_i && rand_ready_o) begin
-            rdrand_buffer <= rand_port_i;
-            rdrand_buffer_valid <= 1'b1;
-        end 
-
-        if(rdrand_buffer_valid && global_rand_counter == OUTS_PER_RAND) begin
-            rdrand_buffer_valid <= 1'b0;
+        if(rand_ready_o) begin
+            if(rand_valid_i) rdrand_buffer <= rand_port_i;
+            else if(triv_valid_i && !rdrand_buffer_valid) begin 
+                rdrand_buffer[64 * triv_counter +: 64] <= triv_port_i;
+                triv_counter <= triv_counter + 1;
+            end
+        end else if(rand_valid && global_rand_counter == OUTS_PER_RAND) begin
+            triv_counter <= '0;
         end
         
     end
@@ -142,6 +149,7 @@ always_ff @ (posedge slow_clk or negedge rst_n) begin
         global_rand_counter <= '0;
         word_counter <= '0;
         seed_queue_tail <= '0;
+        rdrand_buffer_valid <= '0;
     end else if (!empty) begin
 
         if(rand_req && !rand_req_reg) begin
@@ -157,7 +165,7 @@ always_ff @ (posedge slow_clk or negedge rst_n) begin
                 end
             endcase
         end else if(rand_req_reg) begin
-            if(!rand_req_type_reg[2]) begin
+            if(!req_randflag) begin
                 word_counter <= word_counter - 1;
                 if(global_seed_counter == OUTS_PER_SEED) begin
                     global_seed_counter <= '0;
@@ -171,6 +179,13 @@ always_ff @ (posedge slow_clk or negedge rst_n) begin
             end
         end
 
+        if(rdrand_buffer_valid && global_rand_counter == OUTS_PER_RAND && req_randflag && rand_valid) begin
+            rdrand_buffer_valid <= 1'b0;
+            global_rand_counter <= '0;
+        end else if(triv_counter == TRIV_INS_PER_BUFFER  || (rand_valid_i && rand_ready_o)) begin
+            rdrand_buffer_valid <= 1'b1;
+        end 
+
     end
 end
 
@@ -178,10 +193,13 @@ always_comb begin
     rand_byte = '0;
     rand_valid = 1'b0;
 
-    if(word_counter != 3'd0) begin
+    if(word_counter != '0) begin
         rand_valid = 1'b1;
-        if(rand_req_type_reg[2]) rand_byte = rdrand_buffer[OUTPUT_WIDTH * global_rand_counter +: OUTPUT_WIDTH];
-        else rand_byte = rdseed_queue[seed_queue_tail_i][OUTPUT_WIDTH * global_seed_counter +: OUTPUT_WIDTH];
+        if(req_randflag) begin 
+            rand_byte = rdrand_buffer[OUTPUT_WIDTH * global_rand_counter +: OUTPUT_WIDTH];
+        end else begin 
+            rand_byte = rdseed_queue[seed_queue_tail_i][OUTPUT_WIDTH * global_seed_counter +: OUTPUT_WIDTH];
+        end 
     end
 end
 

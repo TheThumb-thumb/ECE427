@@ -74,6 +74,10 @@ module top (
     logic drbg_random_valid;
     logic [127:0] drbg_random_block;
 
+    //Connections between Trivium and Output Buffer
+    logic triv_out_valid, triv_out_ready;
+    logic [63:0] triv_out;
+
     // Wires to connect control to other modules (from control)
     logic        clk;
     logic        latch_entropy_mux_out; // Serial debug output from selected latch entropy source
@@ -259,18 +263,19 @@ module top (
         .debug_register(curr_state[6:0])
     );
 
-    logic triv_gen;
-    logic [7:0] triv_out;
     //Instantiate Trivium:
     trivium_top tri_state ( // NEEDS trivium_debug
         .clk(clk),
         .rst(~rst_n),
 
         .cond_in(seed),
-        .cond_valid(cond_drbg_valid),
+        .cond_valid(cond_drbg_valid),   //valid
+        .seed_req(cond_triv_ready),     //ready
+        .stall(~triv_out_ready),
 
-        .seed_req(cond_triv_ready),
-        .triv_ready(triv_gen),
+        //no ready signal from output buffer?
+        .triv_valid(triv_out_valid), 
+        //.triv_ready(triv_out_ready),
         .rrand_out(triv_out)
     );
 
@@ -314,6 +319,10 @@ module top (
         .rand_valid_i(drbg_random_valid),
         .rand_port_i(drbg_random_block),
         .rand_ready_o(drbg_output_ready),
+
+        .triv_valid_i(triv_out_valid),
+        .triv_port_i(triv_out),
+        .triv_ready_o(triv_out_ready),
 
         .rand_req(rand_req),
         .rand_req_type(rand_req_type),

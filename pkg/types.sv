@@ -10,7 +10,7 @@ package params;
     localparam OUTREG_MAX_WIDTH = 64;
     localparam DATA_WIDTH = 256;
     localparam cond_width = 384;
-    localparam calib_bits = 8;
+    localparam calib_bits = 6;
     localparam es_sources = 64;
     localparam latch_sources = 32;
     localparam jitter_sources = 32;

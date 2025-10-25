@@ -38,6 +38,8 @@ module control_tb;
 
     logic input_pin_1;
 
+    logic [383:0] conditioner_serial_input;
+
 
     // Instantiate the control module
     control dut_control (

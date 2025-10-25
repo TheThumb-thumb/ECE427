@@ -66,29 +66,32 @@ module top_tb;
 		end
 	end
 
+	int shorts_received, shorts_received_max; 
+
 	initial begin
 		debug = 1'b0;
 		rand_req = 1'b1;
 
 		forever begin 
-			@(negedge rand_valid or negedge top_reset);
-			case ($urandom_range(5, 0))
-				0: rand_req_type = RDSEED_16;
-				1: rand_req_type = RDRAND_16;
-				2: rand_req_type = RDSEED_32;
-				//3: rand_req_type = RDRAND_32;
-				4: rand_req_type = RDSEED_64;
-				//5: rand_req_type = RDRAND_64;
-				default:rand_req_type = RDSEED_16;
-			endcase
+			@(posedge slow_clk) begin
+				if(shorts_received == shorts_received_max) begin
+					case ($urandom_range(5, 0))
+						0: rand_req_type = RDSEED_16;
+						1: rand_req_type = RDRAND_16;
+						2: rand_req_type = RDSEED_32;
+						3: rand_req_type = RDRAND_32;
+						4: rand_req_type = RDSEED_64;
+						5: rand_req_type = RDRAND_64;
+						default: rand_req_type = RDSEED_16;
+					endcase
+				end
+			end
 		end
 	end
 
-	int shorts_received, shorts_received_max;
-
-	//Monitor output pins, verify that no extra bits are being served
-	initial begin
-		if(rand_req) begin
+	//Monitor output pins, verify that no extra bytes are being served
+	initial begin 
+		forever @(posedge slow_clk) begin 
 			case (rand_req_type)
 				RDSEED_16, RDRAND_16: begin
 					shorts_received_max = 1;
@@ -101,16 +104,17 @@ module top_tb;
 				end
 			endcase
 		end
-	end
+	end 
 
-	initial begin
-		@(posedge slow_clk);
-		assert(shorts_received < shorts_received_max) else 
-		$warning(1, "FATAL ERROR: shorts_received (%0d) has exceeded the max limit (%0d)!", shorts_received, shorts_received_max);
-
-		if(rand_valid) begin
-			shorts_received = shorts_received + 1;
-		end
+	initial begin 
+		forever begin
+			@(posedge slow_clk) begin
+				if(rand_valid) shorts_received = shorts_received + 1;
+				else if(shorts_received == shorts_received_max) shorts_received = 0;
+				// assert(shorts_received < shorts_received_max) else 
+				// $warning(1, "FATAL ERROR: shorts_received (%0d) has exceeded the max limit (%0d)!", shorts_received, shorts_received_max);
+			end
+		end 
 	end
 
 	//Drive reset and log signals

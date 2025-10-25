@@ -13,14 +13,14 @@ import params::*;
     output logic perm_fail,
     output logic valid,
     // outputs for controlling entropy source calibration
-    output logic [7:0] calibration_arr_n,   // controls the number of 0s
-    output logic [7:0] calibration_arr_p    // controls the number of 1s
+    output logic [5:0] calibration_arr_n,   // controls the number of 0s
+    output logic [5:0] calibration_arr_p    // controls the number of 1s
 );
 
 logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter, sample_cnt;
 logic [C_PERM-1:0] buff_reg;
 logic rep_fail, adaptive_fail, calibration_pass;
-logic [7:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_curr, calibration_arr_p_next;
+logic [5:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_curr, calibration_arr_p_next;
 logic good_entropy_out;
 logic inter_fail;
 logic window;
@@ -123,8 +123,8 @@ assign calibration_arr_p = calibration_arr_p_curr;
 always_ff @(posedge clk) begin
 
     if (rst) begin
-        calibration_arr_n_curr <= 8'b11000000;
-        calibration_arr_p_curr <= 8'b11000000;
+        calibration_arr_n_curr <= 6'b000000;
+        calibration_arr_p_curr <= 6'b000000;
     end else if (debug_mode) begin
         calibration_arr_n_curr <= spi_reg_lsb[15:8];
         calibration_arr_p_curr <= spi_reg_lsb[7:0];

@@ -18,7 +18,7 @@ module ctr_drbg_wrapper #(
 
   // Status/telemetry
   output logic                 busy_o,        // high when not idle
-  output logic [15:0]          blocks_since_reseed_o
+  output logic [15:0]          blocks_since_reseed_o // remove blocks since reseed 
 );
 
 // DRBG Wires
@@ -34,6 +34,13 @@ logic                drbg_busy;
 logic                drbg_done;
 logic                drbg_rand_v;
 logic [127:0]        drbg_rand;
+
+
+logic [1:0]           seed_stretch;              
+logic                 seed_stretch_ld_inst;      
+logic                 seed_stretch_ld_reseed;    
+logic                 inst_fired;                
+logic                 reseed_fired;              
 
 assign num_blocks_1         = 16'd1;       // Stream one block at a time
 assign additional_input_zero = '0;
@@ -60,7 +67,9 @@ aes_ctr_drbg #(
     .generate_i        (generate_pulse),
     .num_blocks_i      (num_blocks_1),
 
-    .seed_material_i   (seed_material),
+    // .seed_material_i   (seed_material),    // when cond doesnt assert xxxxx
+    .seed_material_i   ('0),  // check if drbg spits
+
     .seed_valid_i      (seed_valid_pulse),
 
     .additional_input_i(additional_input_zero),
@@ -99,14 +108,16 @@ assign out_valid_o = hold_valid;
 assign out_data_o  = hold_data;
 
 // Conditioner handshake + DRBG drive FSM
-typedef enum logic [2:0] {
+typedef enum logic [3:0] {
     W_IDLE,
     W_SEED_REQ,     // assert drbg_ready_o
     W_SEED_WAIT,    // wait for drbg_valid_i; latch seed
     W_INST_PULSE,   // pulse instantiate + seed_valid
+    W_WAIT_INIT,
     W_RUN,          // stream generates until backpressure or reseed interval hit
     W_RESEED_REQ,   // request new seed from conditioner
-    W_RESEED_PULSE  // pulse reseed + seed_valid
+    W_RESEED_PULSE,  // pulse reseed + seed_valid
+    W_WAIT_RESEED
 } wstate_t;
 
 wstate_t state, state_n;
@@ -118,7 +129,10 @@ always_comb begin
     reseed_pulse      = 1'b0;
     generate_pulse    = 1'b0;
     seed_valid_pulse  = 1'b0;
-    seed_material     = seed_latched;
+    // seed_material     = seed_latched;
+
+    seed_stretch_ld_inst   = 1'b0;
+    seed_stretch_ld_reseed = 1'b0;
 
     // Conditioner handshake default
     drbg_ready_o      = 1'b0;
@@ -143,38 +157,42 @@ always_comb begin
         end
 
         W_SEED_WAIT: begin
-        drbg_ready_o = 1'b1;
-        if (drbg_valid_i) begin
-            // latch happens in sequential block below
-            state_n = W_INST_PULSE;
-        end
+            drbg_ready_o = 1'b1;
+            if (drbg_valid_i) begin             // move immediately on current valid
+                seed_stretch_ld_inst = 1'b1;      // your existing stretch flag
+                state_n = W_INST_PULSE;
+            end
         end
 
         W_INST_PULSE: begin
-            // Push seed into core and instantiate
-            seed_material    = seed_latched;
+            // Stretch seed_valid while seed_stretch != 0
+            // seed_material    = seed_latched;
             seed_valid_pulse = 1'b1;
-            instantiate_pulse= 1'b1;
-            // reset interval counter
-            blocks_since_reseed_n = '0;
-            // next: start running
-            state_n          = W_RUN;
+
+            // 1c instantiate pulse (gated by inst_fired)
+            if (!inst_fired) instantiate_pulse = 1'b1; 
+
+            // When stretch is done, move on
+            if (seed_stretch == 0) begin
+                blocks_since_reseed_n = '0;
+                state_n = W_WAIT_INIT;
+            end
+        end
+
+        W_WAIT_INIT: begin
+            if(drbg_done)begin
+                state_n = W_RUN;
+            end
         end
 
         W_RUN: begin
             // If downstream can accept (either empty or will consume next),
             // and the core is idle (done_o just completed the last block), set another 1 block generate.
-            // We allow overlapping: as soon as DRBG isn't busy and we don't have backpressure, kick the next block.
-            if (!hold_valid || (hold_valid && out_ready_i)) begin
-                // check reseed interval
+            if (!out_valid_o || (out_valid_o && out_ready_i)) begin
                 if (blocks_since_reseed >= RESEED_INTERVAL) begin
                     state_n = W_RESEED_REQ;
-                end else begin
-                // idle between 1 block gen, use done_o as guard
-                // Issue a new generate only when core is not busy
-                if (!drbg_busy) begin
+                end else if (!drbg_busy) begin
                     generate_pulse = 1'b1;
-                end
                 end
             end
             // blocks_since_reseed go incr a block is actually produced
@@ -183,166 +201,139 @@ always_comb begin
             end
         end
 
+
+
+
         W_RESEED_REQ: begin
             drbg_ready_o = 1'b1;
-            state_n      = W_RESEED_PULSE; // wait one cycle if you want valid check, or:
-            if (!drbg_valid_i) state_n = W_RESEED_REQ; //  wait for valid
-        end
-
-        W_RESEED_PULSE: begin
             if (drbg_valid_i) begin
-                seed_valid_pulse = 1'b1;
-                reseed_pulse     = 1'b1;
-                blocks_since_reseed_n = '0;
-                state_n          = W_RUN;   // resume streaming
-            end else begin
-                // stay until conditioner gives a seed
-                drbg_ready_o     = 1'b1;
-                state_n          = W_RESEED_PULSE;
+                seed_stretch_ld_reseed = 1'b1;
+                state_n = W_RESEED_PULSE;
             end
         end
+
+
+        W_RESEED_PULSE: begin
+            // seed_material = seed_latched;
+            seed_valid_pulse = 1'b1;
+
+            if (!reseed_fired) reseed_pulse = 1'b1;               // one cycle is fine; seed_valid stretches
+            
+            if (seed_stretch == 0) begin
+                blocks_since_reseed_n = '0;
+                state_n = W_WAIT_RESEED;             // wait for core to complete update
+            end
+        end
+
+        W_WAIT_RESEED: begin
+            if (drbg_done) begin
+                state_n = W_RUN;
+            end
+        end
+
 
         default: state_n = W_IDLE;
     endcase
 end
-
-// Seq: latch seed & state/counters
-always_ff @(posedge clk) begin
-    if (!rst_n) begin
-        state               <= W_IDLE;
-        seed_latched        <= '0;
-        blocks_since_reseed <= '0;
-    end else begin
-        state               <= state_n;
-        blocks_since_reseed <= blocks_since_reseed_n;
-
-        // Latch new seed when conditioner asserts valid in the wait states
-        if ((state == W_SEED_WAIT && drbg_valid_i) || (state == W_RESEED_REQ && drbg_valid_i) || (state == W_RESEED_PULSE && drbg_valid_i)) begin
-            seed_latched <= seed_i;
-        end
-    end
-end
-
-endmodule
+logic drbg_valid_q;  // 1-cycle delayed copy of drbg_valid_i
 
 
-
-// module ctr_drbg_wrapper #(
-//     parameter int KEY_BITS        = 128,  // AES
-//     parameter int DATA_WIDTH      = 256,  // Seed width from conditioner
-//     parameter int RESEED_INTERVAL = 511   // simple reseed guard (count of generate calls)
-
-// )(
-//     input  logic                      clk,
-//     input  logic                      rst_n,
-
-//     // Handshake to/from conditioner
-//     output logic                   drbg_ready_o, // -> conditioner.drbg_ready_i
-//     input  logic                   drbg_valid_i, // <- conditioner.drbg_valid_o
-//     input  logic [DATA_WIDTH-1:0]  seed_i,       // <- conditioner.seed_o (256-bit)
-
-//     // DRBG signals from control
-//     input  logic                   instantiate_i, // 1-cycle (IDLE only)
-//     input  logic                   reseed_i,      // 1-cycle (IDLE only)
-//     input  logic                   generate_i,    // 1-cycle (IDLE only)
-//     input  logic [15:0]            num_blocks_i,  // # of 128b encrypt blocks to output
-
-
-//     // DRBG status & data outputs
-//     output logic                   random_valid_o,      //  per 128b block
-//     output logic [KEY_BITS-1:0]    random_block_o       // capture on random_valid_o
-    
-// );
-
-// // seed handoff to DRBG:
-// logic [DATA_WIDTH-1:0] seed_latched;
-// logic seed_valid_pulse;
-// logic core_done;
-
-// // FSM: request seed, capture seed, chuck @ DRBG
-// typedef enum logic [1:0] {W_IDLE, W_WAIT_SEED, W_PULSE_DRBG} wstate_t;
-// wstate_t wstate, wstate_n;
-
-// // Seq Logic
+// // Registered seed_material (single driver) and delayed valid
 // always_ff @(posedge clk) begin
 //     if (!rst_n) begin
-//         wstate           <= W_IDLE;
-//         seed_latched     <= '0;
-//         seed_valid_pulse <= 1'b0;
+//         seed_material <= '0;
+//         drbg_valid_q  <= 1'b0;
 //     end else begin
-//         wstate           <= wstate_n;
-//         // goes into DRBG
-//         seed_valid_pulse <= (wstate_n == W_PULSE_DRBG);
+//         drbg_valid_q  <= drbg_valid_i;                 // delay valid by 1
 
-//         // Latch the 256b seed exactly when conditioner asserts valid
-//         if (drbg_valid_i && (wstate == W_WAIT_SEED)) begin
-//             seed_latched <= seed_i;
-//         end
+//         // hold seed on the bus during INST/RESEED; clear after done
+//         if (state == W_INST_PULSE || state == W_RESEED_PULSE)
+//             seed_material <= seed_latched;
+//         else if (drbg_done)
+//             seed_material <= '0;
 //     end
 // end
 
-// // Comb Logic
-// always_comb begin
-//     wstate_n      = wstate;
-//     drbg_ready_o  = 1'b0;
+// // Seq: latch seed & state/counters
+// always_ff @(posedge clk) begin
+//     if (!rst_n) begin
+//         state               <= W_IDLE;
+//         seed_latched        <= '0;
+//         blocks_since_reseed <= '0;
+//         seed_stretch        <= '0;
+//         inst_fired          <= 1'b0;
+//         reseed_fired        <= 1'b0;
+//     end else begin
+//         state               <= state_n;
+//         blocks_since_reseed <= blocks_since_reseed_n;
 
-//     unique case (wstate)
-//         W_IDLE: begin
-//             // @ instan or reseed request, ask conditioner for a seed
-//             if (instantiate_i || reseed_i) begin
-//                 drbg_ready_o = 1'b1;
-//                 wstate_n     = W_WAIT_SEED;
-//             end
+//         // FIX: latch seed on the *delayed* valid in the wait states
+//         if ( (state == W_SEED_WAIT   && drbg_valid_q) ||
+//              (state == W_RESEED_REQ  && drbg_valid_q) ) begin
+//             seed_latched <= seed_i;
 //         end
 
-//         W_WAIT_SEED: begin
-//             // stays ready asserted until conditioner sends valid
-//             drbg_ready_o = 1'b1;
-//             if (drbg_valid_i) begin
-//                 wstate_n = W_PULSE_DRBG;  // next cycle: strobe seed into DRBG core
-//             end
-//         end
+//         // Stretch counter: load -> count down while in pulse states
+//         if (seed_stretch_ld_inst)
+//             seed_stretch <= 2;
+//         else if (seed_stretch_ld_reseed)
+//             seed_stretch <= 2;
+//         else if ((state == W_INST_PULSE || state == W_RESEED_PULSE) && seed_stretch != 0)
+//             seed_stretch <= seed_stretch - 2'd1;
 
-//         W_PULSE_DRBG: begin
-//             // seed_valid is generated, return to idle
-//             wstate_n = W_IDLE;
-//         end
+//         // One-cycle pulse guards
+//         if (state == W_INST_PULSE && !inst_fired)  inst_fired  <= 1'b1;
+//         else if (state != W_INST_PULSE)            inst_fired  <= 1'b0;
 
-//         default: wstate_n = W_IDLE;
-//     endcase
+//         if (state == W_RESEED_PULSE && !reseed_fired) reseed_fired <= 1'b1;
+//         else if (state != W_RESEED_PULSE)             reseed_fired <= 1'b0;
+//     end
 // end
 
 
-// // drbg core
-// aes_ctr_drbg #(
-//     .KEY_BITS        (KEY_BITS),
-//     .BLOCK_BITS      (128),
-//     .SEED_BITS       (DATA_WIDTH),
-//     .RESEED_INTERVAL (RESEED_INTERVAL)
-// ) u_drbg (
-//     .clk               (clk),
-//     .rst_n             (rst_n),
+always_ff @(posedge clk) begin
+  if (!rst_n) begin
+    seed_material <= '0;
+  end else begin
+    if (state == W_INST_PULSE || state == W_RESEED_PULSE)
+      seed_material <= seed_latched; // present captured seed during seed_valid window
+    else if (drbg_done)
+      seed_material <= '0;           // drop after core completes
+  end
+end
 
-//     // command pulses & size
-//     .instantiate_i     (instantiate_i),
-//     .reseed_i          (reseed_i),
-//     .generate_i        (generate_i),
-//     .num_blocks_i      (num_blocks_i),
+always_ff @(posedge clk) begin
+  if (!rst_n) begin
+    state               <= W_IDLE;
+    seed_latched        <= '0;
+    blocks_since_reseed <= '0;
+    seed_stretch        <= '0;
+    inst_fired          <= 1'b0;
+    reseed_fired        <= 1'b0;
+  end else begin
+    state               <= state_n;
+    blocks_since_reseed <= blocks_since_reseed_n;
 
-//     // seed from wrapper (latched + 1-cycle strobe)
-//     .seed_material_i   (seed_latched),
-//     .seed_valid_i      (seed_valid_pulse),
+    // >>> Latch on raw VALID (no state gating) <<<
+    if (drbg_valid_i)
+      seed_latched <= seed_i;
 
-//     // optional additional input (post-generate update)
-//     .additional_input_i('0),
+    // Stretch counter
+    if (seed_stretch_ld_inst)
+      seed_stretch <= 2;
+    else if (seed_stretch_ld_reseed)
+      seed_stretch <= 2;
+    else if ((state == W_INST_PULSE || state == W_RESEED_PULSE) && seed_stretch != 0)
+      seed_stretch <= seed_stretch - 2'd1;
 
-//     // status & data
-//     //.busy_o            (busy_o),
-//     .done_o            (core_done),
-//     .random_valid_o    (random_valid_o),
-//     .random_block_o    (random_block_o)
-// );
+    // One-cycle pulse guards
+    if (state == W_INST_PULSE && !inst_fired)  inst_fired  <= 1'b1;
+    else if (state != W_INST_PULSE)            inst_fired  <= 1'b0;
 
-// // assign buffer_ready = core_done;
+    if (state == W_RESEED_PULSE && !reseed_fired) reseed_fired <= 1'b1;
+    else if (state != W_RESEED_PULSE)             reseed_fired <= 1'b0;
+  end
+end
 
-// endmodule
+
+endmodule

@@ -19,6 +19,7 @@ initial rst = 1'b0;
     logic [latch_sources-1:0][calib_bits-1:0] arr_n;
     logic [latch_sources-1:0][calib_bits-1:0] arr_p;
     logic [jitter_sources-1:0] j_disable_arr;
+    logic [es_sources-1:0] rd_good_arr;
 
     always_ff @(posedge clk) begin
         for (int i = 0; i < es_sources; i++) begin
@@ -44,7 +45,8 @@ initial rst = 1'b0;
         .empty(empty),
         .arr_n(arr_n),
         .arr_p(arr_p),
-        .j_disable_arr(j_disable_arr)
+        .j_disable_arr(j_disable_arr),
+        .rd_good_arr(rd_good_arr)
 
     );
 

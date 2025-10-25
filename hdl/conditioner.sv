@@ -89,7 +89,7 @@ always_comb begin
     message = message_i;
 
     //Control outputs
-    oht_ready_o = ~busy_reg;
+    oht_ready_o = ~busy_reg && (drbg_ready_i || rdseed_ready_i);
     drbg_valid_o = 1'b0;
     rdseed_valid_o = 1'b0;
 

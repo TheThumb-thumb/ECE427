@@ -13,7 +13,8 @@ import params::*;
     output logic [cond_width-1:0] cond_out,
     output logic full,
     output logic empty,
-    output logic [latch_sources-1:0][calib_bits-1:0] arr_n,
+
+    output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
     output logic [jitter_sources-1:0] j_disable_arr,
     output logic [es_sources-1:0] rd_good_arr
@@ -227,7 +228,7 @@ que_fiao sram_aes_buff (
 // PORTA Write ONLY
 // PORTB Read ONLY
 
-oht_dp_sram rng_storage(
+oht_dp_sram_not_tcc rng_storage(
     // outputs:
     // A
     .CENYA(CENYA),
