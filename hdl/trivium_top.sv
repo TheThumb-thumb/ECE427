@@ -35,7 +35,7 @@ import le_types::*;
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            vector <= 'x;
+            vector <= '0;
             flag <= '0;
         end else if (cond_valid) begin
             vector <= cond_in[159:0];
@@ -47,8 +47,8 @@ import le_types::*;
 
     // assign iv_full = full;
     // assign deque = (full && curr_state != TRIV_IDLE) ? '1 : '0;
-    // assign iv_ = iv_full ? vector : 'x;
-    // assign key_ = key_full ? vector : 'x;
+    // assign iv_ = iv_full ? vector : '0;
+    // assign key_ = key_full ? vector : '0;
 
     assign iv_ = vector[159:80];
     assign key_ = vector[79:0];
@@ -65,7 +65,7 @@ import le_types::*;
                 if (flag) begin
                     next_state = SETUP;
                 end
-                seed_req = 1'b0;
+                seed_req = 1'b1;
                 // triv_valid = 1'b0;
             end
             SETUP: begin

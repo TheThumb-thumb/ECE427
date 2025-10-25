@@ -15,6 +15,9 @@ module conditioner #(
     // Control Signals (valid/ready handshakes)
     input  logic        oht_valid_i,            // OHT indicating that a raw number is valid
     output logic        oht_ready_o,            // Indicate to OHT that we ready for a raw number
+    
+    input  logic        triv_ready_i,           // Trivium indicating it is ready for a seed
+    output logic        triv_valid_o,           //Indicate to Trivium that a seed is valid
 
     input  logic        drbg_ready_i,           // DRBG indicating it is ready for a seed
     output logic        drbg_valid_o,           // Indicate to DRBG that a seed is valid
@@ -38,13 +41,19 @@ logic [(DATA_WIDTH/2)-1:0] debug_key_buffer;
 logic [DATA_WIDTH-1:0] debug_message_buffer;
 logic [8:0] debug_ctr;
 logic debug_cond;
+logic [2:0] seed_requests, seed_grants, seed_grants_actual;
+logic seed_granted;
 
+assign seed_requests = {triv_ready_i, rdseed_ready_i, drbg_ready_i};
+assign {triv_valid_o, rdseed_valid_o, drbg_valid_o} = seed_grants_actual;
 assign debug_cond = (debug_register == 7'b110_0000) ? 1'b1 : 1'b0;
 
 //Normal operation signals
-logic start, done, busy, busy_reg, seed_staged;
+logic start, done, busy, busy_reg, seed_staged, request_incoming;
 logic [DATA_WIDTH-1:0] message;
 logic [(DATA_WIDTH/2)-1:0] key;
+
+assign request_incoming = drbg_ready_i || rdseed_ready_i || triv_ready_i;
 
 always_ff @ (posedge clk) begin
     if(!rst_n) begin
@@ -55,7 +64,7 @@ always_ff @ (posedge clk) begin
         else if(busy_reg && done) busy_reg <= 1'b0;
 
         if(done) seed_staged <= 1'b1;
-        else if(seed_staged && (drbg_ready_i || rdseed_ready_i)) seed_staged <= 1'b0;
+        else if(seed_staged && request_incoming) seed_staged <= 1'b0;
     end
 end
 
@@ -89,9 +98,11 @@ always_comb begin
     message = message_i;
 
     //Control outputs
-    oht_ready_o = ~busy_reg && (drbg_ready_i || rdseed_ready_i);
-    drbg_valid_o = 1'b0;
-    rdseed_valid_o = 1'b0;
+    oht_ready_o = ~busy_reg && request_incoming;
+
+    //Arbiter control signal
+    seed_granted = 1'b0;
+    seed_grants_actual = 3'b0;
 
     //We are in debug mode, use the debug buffer and serial input
     if(debug && debug_cond) begin
@@ -110,12 +121,21 @@ always_comb begin
         start = 1'b1;
     end
 
-    if(seed_staged) begin
-        drbg_valid_o = 1'b1;
-        if(!drbg_ready_i) rdseed_valid_o = 1'b1;
+    //Serve a request to one one of the three requestors based on a LRU tiebreaker scheme
+    if(seed_staged && request_incoming) begin
+        seed_grants_actual = seed_grants;
+        seed_granted = 1'b1;
     end
 
 end
+
+lru_arbiter_3 conditioner_arbiter_inst (
+    .clk(clk),
+    .rst_n(rst_n),
+    .req(seed_requests),
+    .gnt_accept(seed_granted),
+    .gnt(seed_grants)
+);
 
 aes_cbc_mac #(
     .DATA_WIDTH(DATA_WIDTH)

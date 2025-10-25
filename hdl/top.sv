@@ -61,8 +61,11 @@ module top (
     logic [(DATA_WIDTH/2)-1:0] key;
 
     //Connections between Conditioner and DRBG
-    logic cond_drbg_valid, cond_drbg_ready, cond_triv_ready, cond_triv_valid;
+    logic cond_drbg_valid, cond_drbg_ready;
     logic [DATA_WIDTH-1:0] seed;
+
+    //Connections between Conditioner and Trivium
+    logic cond_triv_ready, cond_triv_valid;
 
     //Connections between Conditioner and Output Buffer
     logic cond_output_valid, cond_output_ready;
@@ -246,7 +249,10 @@ module top (
         .oht_valid_i(oht_cond_valid),
         .oht_ready_o(oht_cond_ready),
 
-        .drbg_ready_i(cond_drbg_ready || cond_triv_ready),
+        .triv_ready_i(cond_triv_ready),
+        .triv_valid_o(cond_triv_valid),
+
+        .drbg_ready_i(cond_drbg_ready),
         .drbg_valid_o(cond_drbg_valid),
 
         .rdseed_ready_i(cond_output_ready),
@@ -269,7 +275,7 @@ module top (
         .rst(~rst_n),
 
         .cond_in(seed),
-        .cond_valid(cond_drbg_valid),   //valid
+        .cond_valid(cond_triv_valid),   //valid
         .seed_req(cond_triv_ready),     //ready
         .stall(~triv_out_ready),
 

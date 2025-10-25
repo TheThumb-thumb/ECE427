@@ -47,7 +47,7 @@ always_ff @(posedge clk) begin
     if (rst) begin
         entropy_counter <= '0;
     end else if (perm_fail) begin
-        entropy_counter <= 'x;
+        entropy_counter <= '0;
     end else if(inter_fail || entropy_counter == 1023) begin
         entropy_counter <= '0;
     end else if (adc_in == 1'b1) begin
@@ -61,8 +61,8 @@ always_ff @( posedge clk ) begin : perm_check
     if (rst) begin
         flag <= '0;
         flag_nxt <= '0;
-        in_curr <= 'x;
-        in_prior <= 'x;
+        in_curr <= '0;
+        in_prior <= '0;
     end else begin
         flag_nxt <= '1; // flag_nxt gets current adc input
         flag <= flag_nxt; // flag has the old adc input

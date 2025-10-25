@@ -106,7 +106,7 @@ end
 always_ff @(posedge clk) begin
 
     if (rst) begin
-        buff_reg <= 'x;
+        buff_reg <= '0;
     end else if (!full) begin
         buff_reg <= {buff_reg[C_PERM-2:0], adc_in};
     end else begin

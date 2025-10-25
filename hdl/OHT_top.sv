@@ -149,7 +149,7 @@ always_comb begin
     end
     wr_reg_next.addr = cnt;
     rd_reg_next.addr = read_cnt;
-    rd_reg_next.data = 'x;
+    rd_reg_next.data = '0;
     if (latch_jitter_flag) begin
         wr_reg_next.data = es_out_jitter;
     end else begin
@@ -268,7 +268,7 @@ oht_dp_sram_not_tcc rng_storage(
     .CENB(1'b0),
     .WENB(1'b1),
     .AB(rd_reg_next.addr),    // need in types
-    .DB(rd_reg_next.data),    // 'x
+    .DB(rd_reg_next.data),    // '0
     .EMAB(3'b000),
     .TENB(1'b1),
     .BENB(1'b1),

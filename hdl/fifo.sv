@@ -43,7 +43,7 @@ import params::*;
             head_reg <= '0;
             tail_reg <= '0;
             for (int i =0; i < DEPTH-1; i++) begin
-                que_data[i] <= 'x;
+                que_data[i] <= '0;
             end
         end
         else begin
@@ -61,7 +61,7 @@ import params::*;
         tail_next = tail_reg;
         counter_next = counter_reg;
         que_data_next = que_data;
-        rdata = 'x;
+        rdata = '0;
         
         unique case ({enque, deque})
 
@@ -74,7 +74,7 @@ import params::*;
                 end
 
                 // do nothing if rst is low
-                rdata = 'x;
+                rdata = '0;
 
             end
 
@@ -106,7 +106,7 @@ import params::*;
                 
                 // if enque and deque at the same time then tail should not increment or decrement
                 // 
-                rdata = 'x;
+                rdata = '0;
                 if(empty && !rst) begin
                     //if queue is empty -- do nothing
                     rdata = wdata;
@@ -126,7 +126,7 @@ import params::*;
             default:
             begin
 
-                rdata = 'x;
+                rdata = '0;
                 counter_next = '0;
 
             end

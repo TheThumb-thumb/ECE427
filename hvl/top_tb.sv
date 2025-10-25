@@ -26,7 +26,7 @@ module top_tb;
 	logic [256:0] temp_seed_out;
 	logic [127:0] temp_drbg_out;
 	logic temp_out_valid;
-	logic [latch_sources-1:0][7:0] arr_n, arr_p;
+	logic [latch_sources-1:0][calib_bits-1:0] arr_n, arr_p;
 	logic [latch_sources-1:0] jitter_disable_arr;
 
 	top dut(
@@ -59,10 +59,12 @@ module top_tb;
 		
 	);
 
+	//Drive entropy pins (pretend to be entropy)
 	initial begin
 		forever begin 
 			@(posedge top_clk);
 			entropy_source_array = { $urandom, $urandom };
+			//entropy_source_array = '1;
 		end
 	end
 
@@ -82,7 +84,7 @@ module top_tb;
 						3: rand_req_type = RDRAND_32;
 						4: rand_req_type = RDSEED_64;
 						5: rand_req_type = RDRAND_64;
-						default: rand_req_type = RDSEED_16;
+						default: rand_req_type = RDRAND_16;
 					endcase
 				end
 			end
@@ -91,6 +93,7 @@ module top_tb;
 
 	//Monitor output pins, verify that no extra bytes are being served
 	initial begin 
+
 		forever @(posedge slow_clk) begin 
 			case (rand_req_type)
 				RDSEED_16, RDRAND_16: begin
@@ -104,18 +107,19 @@ module top_tb;
 				end
 			endcase
 		end
-	end 
 
-	initial begin 
 		forever begin
 			@(posedge slow_clk) begin
+				#1;
 				if(rand_valid) shorts_received = shorts_received + 1;
 				else if(shorts_received == shorts_received_max) shorts_received = 0;
-				// assert(shorts_received < shorts_received_max) else 
-				// $warning(1, "FATAL ERROR: shorts_received (%0d) has exceeded the max limit (%0d)!", shorts_received, shorts_received_max);
 			end
 		end 
 	end
+
+	// property rand_byte_stability_on_valid;
+	// 	@(posedge slow_clk)
+	// endproperty
 
 	//Drive reset and log signals
 	initial begin

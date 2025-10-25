@@ -35,7 +35,7 @@ module que_fiao #(
     always_comb begin
         buffer_next  = buffer_reg;
         counter_next = counter_reg;
-        rdata        = 'x;
+        rdata        = '0;
 
         full  = (counter_reg == CHUNKS);
         empty = (counter_reg == 0);

@@ -48,7 +48,7 @@ import params::*;
         // tail_next = tail_cur;
         // count_next = count_cur;
         vector_next = vector_cur;
-        vector = 'x;
+        vector = '0;
 
         unique case ({enque, deque})
             
@@ -85,7 +85,7 @@ import params::*;
             end
 
             default: begin
-                vector = 'x;
+                vector = '0;
                 // count_next = '0;
             end
         endcase

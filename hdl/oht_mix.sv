@@ -120,7 +120,7 @@ end
 always_ff @(posedge adc_en) begin
 
     if (rst) begin
-        buff_reg <= 'x;
+        buff_reg <= '0;
         noise_counter <= '0;
     end else begin
         noise_counter <= noise_counter + 1;
