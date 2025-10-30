@@ -15,6 +15,8 @@ module output_buffer #(
     // System Signals
     input  logic        clk,
     input  logic        rst_n,
+    input  logic        output_stall_temp,
+    input  logic        triv_debug, // debug register is trying to stall debug
 
     //Connections to DRBG and Conditioner
     input logic                     seed_valid_i, 
@@ -35,7 +37,6 @@ module output_buffer #(
     output logic [OUTPUT_WIDTH-1:0] rand_byte,  // Byte-sliced output
     output logic rand_valid,                    // Output valid signal (active high)
     output logic slow_clk
-
 );
 
 //Constants
@@ -123,7 +124,7 @@ end
 
 //Mux the inputs based on DRBG mode
 always_comb begin
-    if(rdrand_request_counter >= 45) begin
+    if(rdrand_request_counter >= 45 || triv_debug) begin
         triv_mode = 1'b1;
     end else begin
         triv_mode = 1'b0;
@@ -173,7 +174,7 @@ always_ff @ (posedge clk) begin
 end
 
 //Empty the queue/buffer
-always_ff @ (posedge slow_clk or negedge rst_n) begin
+always_ff @(posedge slow_clk or negedge rst_n) begin
     if(!rst_n) begin
         seed_counter <= '0;
         rand_counter <= OUTS_PER_RAND;
@@ -224,7 +225,13 @@ always_comb begin
     rand_valid = 1'b0;
 
     if(out_counter != '0) begin
-        rand_valid = 1'b1;
+        //  THIS IS SOMETHING I ADDED FOR output buffer stall on temp - Rohan 10/26 5:13pm
+        if (output_stall_temp) begin 
+            rand_valid = 1'b0;
+        end else begin
+            rand_valid = 1'b1;
+        end
+        // OG Code: rand_valid = 1'b1;
         if(req_randflag) begin 
             rand_byte = rdrand_buffer[OUTPUT_WIDTH * rand_counter +: OUTPUT_WIDTH];
         end else begin 

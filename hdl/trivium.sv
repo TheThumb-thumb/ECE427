@@ -43,7 +43,7 @@ import le_types::*;
         gt3 = '0;
         z = '0;
 
-        if (state == SETUP) begin
+        if (state == SETUP || state == DEBUG_SETUP) begin
             t1[0] = internal_state[65] ^ internal_state[90] & internal_state[91] ^ internal_state[92] ^ internal_state[170];
             t2[0] = internal_state[161] ^ internal_state[174] & internal_state[175] ^ internal_state[176] ^ internal_state[263];
             t3[0] = internal_state[242] ^ internal_state[285] & internal_state[286] ^ internal_state[287] ^ internal_state[68];
@@ -52,7 +52,7 @@ import le_types::*;
             internal_state_next[176:93] = {internal_state[175:93], t1[0]};
             internal_state_next[STATE-1:177] = {internal_state[286:177], t2[0]};
         end 
-        else if (state == GEN) begin
+        else if (state == GEN || state == DEBUG_GEN) begin
 
             t1[0] = internal_state[65] ^ internal_state[92];
             t2[0] = internal_state[161] ^ internal_state[176];
@@ -590,7 +590,7 @@ import le_types::*;
                 internal_state <= internal_state;
                 byte_stream <= '0;
                 count <= count;
-            end else if (state == GEN) begin
+            end else if (state == GEN || state == DEBUG_GEN) begin
                 byte_stream <= z;
                 count <= count + 1'b1;
             end

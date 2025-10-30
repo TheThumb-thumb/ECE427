@@ -51,6 +51,8 @@ module control (
     input logic [15:0] lower_jitter_entropy_good,
     input logic [15:0] upper_jitter_entropy_good,
 
+    input logic io_temp_debug,
+
     output logic [21:0] curr_state
 );
 
@@ -139,10 +141,10 @@ module control (
 
     // State comb
     always_comb begin : state_logic
-        if (!temp_sense_0_good || !temp_sense_1_good || !temp_sense_2_good || !temp_sense_3_good)
-            next_state = HALT_STATE;
-        else if (debug && write_debug_state)
+        if (debug && write_debug_state)
             next_state = new_debug_state_value;
+        else if ((!temp_sense_0_good || !temp_sense_1_good || !temp_sense_2_good || !temp_sense_3_good) && !io_temp_debug)
+            next_state = HALT_STATE;
         else
             next_state = curr_state;
     end
@@ -304,7 +306,9 @@ module control (
                 2'b11: begin
                     case (curr_state[4:0])
                         5'b00000: CTD_debug_input = input_bypass_mux_out;
-                        default: ; // do nothing
+                        5'b00001: CTD_debug_input = input_bypass_mux_out;
+                        5'b00011: CTD_debug_input = input_bypass_mux_out;
+                        default: CTD_debug_input = input_bypass_mux_out; // do nothing
                     endcase
                 end
 

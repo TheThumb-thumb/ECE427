@@ -37,6 +37,10 @@ module top (
     output logic output_pin_1,
     input logic input_pin_1,
 
+    // Temperature sensor I/O
+    input logic[3:0] temp_sens_in, // 0 -> bottom right 1 -> bottom left 2 -> top left 3 -> top right
+    input logic io_temp_debug,
+
     // //Temp pins for verification (no output buffer or entropy)
     input logic [es_sources-1:0] entropy_source_array,
     // output logic [256:0] temp_seed_out,
@@ -47,6 +51,8 @@ module top (
     output logic [jitter_sources-1:0] jitter_disable_arr
 
 );
+    logic output_stall_temp;
+    assign output_stall_temp = temp_sens_in[0] | temp_sens_in[1] | temp_sens_in[2] | temp_sens_in[3];
 
     logic empty;
     logic [es_sources-1:0] rd_good_arr;
@@ -149,6 +155,8 @@ module top (
         .temp_threshold_2(temp_threshold_2),
         .temp_threshold_3(temp_threshold_3),
 
+        .io_temp_debug(io_temp_debug), //Disable temp sensors from halting
+
         .temp_sense_0_good(temp_sense_0_good), // Single bit boolean good/bad for temp sensor
         .temp_sense_1_good(temp_sense_1_good),
         .temp_sense_2_good(temp_sense_2_good),
@@ -162,6 +170,7 @@ module top (
         .curr_state(curr_state)
     );
 
+    
     // Mux between Latch Entropy Sources and Latch OHT. This 
     logic [5:0] output_select_latch_entropy_oht;
     logic [5:0] input_select_latch_entropy_oht;
@@ -231,7 +240,7 @@ module top (
 
     logic [1:0] CTD_serial_sel;
     logic conditioner_debug;
-    logic trivium_debug;
+    // logic trivium_debug;
     logic drbg_debug;
     logic parallelizer_data_valid_out;
     logic [383:0] debug_parallel_out;
@@ -269,8 +278,11 @@ module top (
         .debug_register(curr_state[6:0])
     );
 
+    logic triv_debug;
+    assign triv_debug = (curr_state[6:0] == 7'b1100001 && debug) ? 1'b1 : 1'b0;
+
     //Instantiate Trivium:
-    trivium_top tri_state ( // NEEDS trivium_debug
+    trivium_top tri_state ( 
         .clk(clk),
         .rst(~rst_n),
 
@@ -278,10 +290,12 @@ module top (
         .cond_valid(cond_triv_valid),   //valid
         .seed_req(cond_triv_ready),     //ready
         .stall(~triv_out_ready),
+        .triv_debug(triv_debug),
+        .debug_in(CTD_debug_input),
 
         //no ready signal from output buffer?
         .triv_valid(triv_out_valid), 
-        //.triv_ready(triv_out_ready),
+        // .triv_ready(triv_out_ready),
         .rrand_out(triv_out)
     );
 
@@ -334,7 +348,11 @@ module top (
         .rand_req_type(rand_req_type),
         .rand_byte(rand_byte),
         .rand_valid(rand_valid),
-        .slow_clk(slow_clk)
+        .slow_clk(slow_clk),
+
+        // stall output buffer if temperature sensor violations:
+        .output_stall_temp(output_stall_temp),
+        .triv_debug(triv_debug)
     );
 
 

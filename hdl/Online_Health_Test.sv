@@ -20,7 +20,7 @@ import params::*;
 logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter, sample_cnt;
 logic [C_PERM-1:0] buff_reg;
 logic rep_fail, adaptive_fail, calibration_pass;
-logic [5:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_curr, calibration_arr_p_next;
+logic [7:0] calibration_arr_n_curr, calibration_arr_p_curr, calibration_arr_n_next, calibration_arr_p_next;
 logic good_entropy_out;
 logic inter_fail;
 logic window;
@@ -114,20 +114,17 @@ always_ff @(posedge clk) begin
     end
 end
 
-// IN DEBUG:
-// if 
-
-assign calibration_arr_n = calibration_arr_n_curr;
-assign calibration_arr_p = calibration_arr_p_curr;
+assign calibration_arr_n = calibration_arr_n_curr[5:0];
+assign calibration_arr_p = calibration_arr_p_curr[5:0];
 
 always_ff @(posedge clk) begin
 
     if (rst) begin
-        calibration_arr_n_curr <= 6'b000000;
-        calibration_arr_p_curr <= 6'b000000;
+        calibration_arr_n_curr <= 8'b11000000;
+        calibration_arr_p_curr <= 8'b11000000;
     end else if (debug_mode) begin
-        calibration_arr_n_curr <= spi_reg_lsb[15:8];
-        calibration_arr_p_curr <= spi_reg_lsb[7:0];
+        calibration_arr_n_curr <= spi_reg_lsb[11:6];
+        calibration_arr_p_curr <= spi_reg_lsb[5:0];
     end else begin
         calibration_arr_n_curr <= calibration_arr_n_next;
         calibration_arr_p_curr <= calibration_arr_p_next;

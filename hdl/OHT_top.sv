@@ -45,7 +45,7 @@ logic [sram_word-1:0] TDA, TQA, TDB, TQB;
 // we are never writing in port B so DB can be whatever
 logic [sram_word-1:0] DB;
 
-sram_dp_reg_t rd_reg, rd_reg_next, rd_reg_out, wr_reg, wr_reg_next, wr_reg_out;
+sram_dp_reg_t rd_reg, rd_reg1, rd_reg_next, rd_reg_out, wr_reg, wr_reg1, wr_reg_next, wr_reg_out;
 logic [$clog2(sram_addr)-1:0] cnt, read_cnt;
 
 logic latch_jitter_flag, latch_jitter_flag_rd;
@@ -78,13 +78,17 @@ always_ff @(posedge clk) begin
     if (rst) begin
         rd_reg_out <= '0;
         wr_reg_out <= '0;
+        wr_reg1 <= '0;
+        rd_reg1 <= '0;
         rd_reg <= '0;
         wr_reg <= '0;
     end else begin
         rd_reg <= rd_reg_next;
         wr_reg <= wr_reg_next;
-        rd_reg_out <= rd_reg;
-        wr_reg_out <= wr_reg;
+        wr_reg1 <= wr_reg;
+        rd_reg1 <= rd_reg;
+        rd_reg_out <= rd_reg1;
+        wr_reg_out <= wr_reg1;
     end
 end
 

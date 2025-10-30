@@ -20,6 +20,7 @@ package params;
 endpackage : params
 
 package le_types;
+    import params::*;
 
     typedef enum logic [2:0] {
         RDSEED_16 = 3'b000,
@@ -37,11 +38,12 @@ package le_types;
         que_rd_wr = 2'b11
     } fifo_state_t;
 
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         TRIV_IDLE, 
-        IV_GEN, 
         SETUP, 
-        GEN
+        GEN,
+        DEBUG_SETUP,
+        DEBUG_GEN
     } trivium_state_t;
 
     typedef enum logic [2:0] {
@@ -70,5 +72,12 @@ package le_types;
         OUTPUT_IDLE,
         OUTPUT_BYTES
     } output_buffer_state_t;
+
+    typedef struct packed {
+        logic [es_sources-1:0] ES_in;
+        logic [latch_sources-1:0][calib_bits-1:0] arr_n, arr_p;
+        logic [jitter_sources-1:0] j_disable_arr;
+        logic [es_sources-1:0] rd_good_arr;
+    } oht_output_t;
 
 endpackage: le_types

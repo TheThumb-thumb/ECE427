@@ -67,8 +67,8 @@ aes_ctr_drbg #(
     .generate_i        (generate_pulse),
     .num_blocks_i      (num_blocks_1),
 
-    // .seed_material_i   (seed_material),    // when cond doesnt assert xxxxx
-    .seed_material_i   ('0),  // check if drbg spits
+    .seed_material_i   (seed_latched),    // when cond doesnt assert xxxxx
+    // .seed_material_i   ('0),  // check if drbg spits
 
     .seed_valid_i      (seed_valid_pulse),
 

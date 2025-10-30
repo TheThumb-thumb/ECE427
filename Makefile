@@ -5,6 +5,9 @@ export TOP_DIR = $(PWD)
 
 #TOP_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/top_tb.sv      $(PWD)/hvl/example_sram.v $(shell find $(PWD)/hdl/ -name '*.sv')
 TOP_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/top_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top.sv
+TOP_TB_IO_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/top_io_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top_io.sv
+
+TOP_TB_SRCS_DEBUG   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/top_debug_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top.sv
 
 TOP_TB_SRCS_CONDITIONER   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/conditioner_debug_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top.sv
 
@@ -35,6 +38,7 @@ VCS_FLAGS      = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -
 VCS_FLAGS_POST = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -fsdb -suppress=LCA_FEATURES_ENABLED +neg_tchk -negdelay +compsdf +mindelays +sdfverbose -j4 -fgp
 
 #Filelists
+TOP_IO_FILELIST := $(PWD)/filelists/top_io_filelist.f
 TOP_FILELIST := $(PWD)/filelists/top_filelist.f
 AES_CBC_MAC_FILELIST := $(PWD)/filelists/aes_cbc_mac_filelist.f
 OHT_TOP_FILELIST := $(PWD)/filelists/oht_top_filelist.f
@@ -45,6 +49,26 @@ top: $(TOP_TB_SRCS)
 	mkdir -p vcs
 	cd vcs && vcs $(TOP_TB_SRCS) $(VCS_FLAGS) -f $(TOP_FILELIST) -l top_compile.log -o top_tb
 	cd vcs && ./top_tb -l top_simulation.log
+
+.PHONY: top_io
+top_io: $(TOP_TB_IO_SRCS)
+	mkdir -p vcs
+	cd vcs && vcs $(TOP_TB_IO_SRCS) $(VCS_FLAGS) -f $(TOP_IO_FILELIST) -l top_io_compile.log -o top_io_tb
+	cd vcs && ./top_io_tb -l top_io_simulation.log
+
+# ====================  THIS IS MICHAEL'S TEST FOR DEBUG FROM TOP ===================================
+
+.PHONY: top_debug_tb
+top_debug_tb:
+	mkdir -p vcs
+	cd vcs && vcs $(TOP_TB_SRCS_DEBUG) $(VCS_FLAGS) -f $(TOP_FILELIST) -l top_debu_compile.log -o top_debug_tb
+	cd vcs && ./top_debug_tb -l top_debug_tb.log
+
+.PHONY: verdi_top_debug_tb
+verdi_top_debug_tb:
+	mkdir -p verdi
+	cd verdi && $(VERDI_HOME)/bin/verdi -ssf $(PWD)/vcs/top_debug_tb.fsdb
+
 
 # ====================  THIS IS FOR TESTING THE CONTROL MODULE INDIVIDUALLY ===================================
 
@@ -176,6 +200,11 @@ vcs/pnr_tb: $(PNR_TB_SRCS)
 verdi:
 	mkdir -p verdi
 	cd verdi && $(VERDI_HOME)/bin/verdi -ssf $(PWD)/vcs/dump.fsdb
+
+.PHONY: top_io_verdi
+top_io_verdi:
+	mkdir -p verdi
+	cd verdi && $(VERDI_HOME)/bin/verdi -ssf $(PWD)/vcs/top_io_dump.fsdb
 
 .PHONY: aes_verdi
 aes_verdi:
