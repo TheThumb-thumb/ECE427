@@ -41,14 +41,12 @@ module top (
     input logic[3:0] temp_sens_in, // 0 -> bottom right 1 -> bottom left 2 -> top left 3 -> top right
     input logic io_temp_debug,
 
-    // //Temp pins for verification (no output buffer or entropy)
+    // Temp pins for verification (pretent to be entropy sources and temp sensor since no mixed signal)
     input logic [es_sources-1:0] entropy_source_array,
-    // output logic [256:0] temp_seed_out,
-    // output logic [127:0] temp_drbg_out,
-    // output logic temp_out_valid
     output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
-    output logic [jitter_sources-1:0] jitter_disable_arr
+    output logic [jitter_sources-1:0] jitter_disable_arr,
+    output logic [13:0] temp_threshold_array [4]
 
 );
     logic output_stall_temp;
@@ -98,20 +96,13 @@ module top (
     logic        jitter_oht_mux_in; // Serial debug input to selected jitter OHT
     logic        CTD_debug_input; // Serial debug input to conditioner/trivium/DRBG
     logic [13:0] temp_counter_0, temp_counter_1, temp_counter_2, temp_counter_3; // Counters for temp sensors, verify w Anthony
-    logic [13:0] temp_threshold_0, temp_threshold_1, temp_threshold_2, temp_threshold_3; // Thresholds for temp sensors
-    logic        temp_sense_0_good, temp_sense_1_good, temp_sense_2_good, temp_sense_3_good; // Single bit boolean good/bad for temp sensor
-    logic [15:0] lower_latch_entropy_good, upper_latch_entropy_good, lower_jitter_entropy_good, upper_jitter_entropy_good;
+    logic [15:0] lower_latch_entropy_good, upper_latch_entropy_good, lower_jitter_entropy_good, upper_jitter_entropy_good; // One-hot status bits for entropy sources
+    logic [5:0] output_buffer_control; // Output buffer clock divider and Trivium disable
     logic [21:0] curr_state; // Contains all the info for 
 
     // MUX port declarations
-    logic [31:0] latch_entropy_sources_out, 
-    latch_oht_default_in, 
-    jitter_entropy_sources_out,
-    jitter_oht_default_in,
-    latch_oht_default_out,
-    latch_sram_default_in,
-    jitter_oht_default_out,
-    jitter_sram_default_in;
+    logic [31:0] latch_oht_default_in; // Direct input connection to latch OHT
+    logic [31:0] jitter_oht_default_in; // Direct input connection to jitter OHT
 
     //------------------------------------------------------------------
     // Module Instantiations
@@ -150,22 +141,24 @@ module top (
         .temp_counter_2(temp_counter_2),
         .temp_counter_3(temp_counter_3),
 
-        .temp_threshold_0(temp_threshold_0),  // Thresholds for temp sensors
-        .temp_threshold_1(temp_threshold_1),
-        .temp_threshold_2(temp_threshold_2),
-        .temp_threshold_3(temp_threshold_3),
+        .temp_threshold_0(temp_threshold_array[0]),  // Thresholds for temp sensors
+        .temp_threshold_1(temp_threshold_array[1]),
+        .temp_threshold_2(temp_threshold_array[2]),
+        .temp_threshold_3(temp_threshold_array[3]),
 
         .io_temp_debug(io_temp_debug), //Disable temp sensors from halting
 
-        .temp_sense_0_good(temp_sense_0_good), // Single bit boolean good/bad for temp sensor
-        .temp_sense_1_good(temp_sense_1_good),
-        .temp_sense_2_good(temp_sense_2_good),
-        .temp_sense_3_good(temp_sense_3_good),
+        .temp_sense_0_good(temp_sens_in[0]), // Single bit boolean good/bad for temp sensor
+        .temp_sense_1_good(temp_sens_in[1]),
+        .temp_sense_2_good(temp_sens_in[2]),
+        .temp_sense_3_good(temp_sens_in[3]),
 
         .lower_latch_entropy_good(lower_latch_entropy_good),
         .upper_latch_entropy_good(upper_latch_entropy_good),
         .lower_jitter_entropy_good(lower_jitter_entropy_good),
         .upper_jitter_entropy_good(upper_jitter_entropy_good),
+
+        .output_buffer_control(output_buffer_control),
 
         .curr_state(curr_state)
     );
@@ -175,7 +168,7 @@ module top (
     logic [5:0] output_select_latch_entropy_oht;
     logic [5:0] input_select_latch_entropy_oht;
     always_comb begin
-        if (curr_state[20:19] == 3'd1) output_select_latch_entropy_oht = {1'b1, curr_state[20:19]};
+        if (curr_state[20:19] == 3'd1) output_select_latch_entropy_oht = {1'b1, curr_state[18:14]};
         else if (curr_state[13:12] == 3'd1) output_select_latch_entropy_oht = {1'b1, curr_state[11:7]};
         else output_select_latch_entropy_oht = 6'b0; // Default value when neither condition is true
 
@@ -185,7 +178,7 @@ module top (
     end
     entropy_oht_mux latch_entropy_oht_mux (
         .debug               (debug),
-        .entropy_sources_out (latch_entropy_sources_out),
+        .entropy_sources_out (entropy_source_array[31:0]),
         .oht_mux_in          (latch_oht_mux_in),        // Serial input to selected latch OHT for debug
         .output_select       (output_select_latch_entropy_oht),          // Select signals for the LATCH module
         .input_select        (input_select_latch_entropy_oht),           // Select signals for the LATCH module
@@ -210,7 +203,7 @@ module top (
     // Mux between Jitter Entropy Sources and Jitter OHT
     entropy_oht_mux jitter_entropy_oht_mux (
         .debug               (debug),
-        .entropy_sources_out (jitter_entropy_sources_out),
+        .entropy_sources_out (entropy_source_array[63:32]),
         .oht_mux_in          (jitter_oht_mux_in),
         .output_select       (output_select_jitter_entropy_oht),          // Select signals for the JITTER module
         .input_select        (input_select_jitter_entropy_oht),           // Select signals for the JITTER module
@@ -239,7 +232,6 @@ module top (
     );
 
     logic [1:0] CTD_serial_sel;
-    logic conditioner_debug;
     // logic trivium_debug;
     logic drbg_debug;
     logic parallelizer_data_valid_out;

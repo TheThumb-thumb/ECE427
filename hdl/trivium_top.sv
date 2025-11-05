@@ -149,7 +149,11 @@ import le_types::*;
             triv_valid <= '0;
         end else if (curr_state == GEN || curr_state == DEBUG_GEN) begin
             curr_state <= next_state;
+            // if (stall) begin
+            //     triv_valid <= '0;
+            // end else begin
             triv_valid <= '1;
+            // end
             if (setup_cnt == SETUP_TIME) begin
                 setup_cnt <= '0;
             end

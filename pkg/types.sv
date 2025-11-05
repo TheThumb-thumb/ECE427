@@ -68,9 +68,20 @@ package le_types;
         logic flag; // indicates whether we should start using the values provided by input for comparison
     } sram_dp_reg_t;
 
-    typedef enum logic [2:0] { 
+    //Output buffer
+
+    //State machine for loading the RDRAND Buffer
+    typedef enum logic [1:0] {
+        RDRAND_BUF_INVALID,
+        RDRAND_LOAD_DRBG,
+        RDRAND_LOAD_TRIV,
+        RDRAND_BUF_VALID
+    } rdrand_load_state_t;
+
+    typedef enum logic [1:0] { 
         OUTPUT_IDLE,
-        OUTPUT_BYTES
+        OUTPUT_SEED,
+        OUTPUT_RAND
     } output_buffer_state_t;
 
     typedef struct packed {

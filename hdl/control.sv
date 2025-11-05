@@ -51,6 +51,8 @@ module control (
     input logic [15:0] lower_jitter_entropy_good,
     input logic [15:0] upper_jitter_entropy_good,
 
+    output logic[5:0] output_buffer_control,
+
     input logic io_temp_debug,
 
     output logic [21:0] curr_state
@@ -82,6 +84,8 @@ module control (
     logic [15:0] internal_upper_latch_entropy_good;
     logic [15:0] internal_lower_jitter_entropy_good;
     logic [15:0] internal_upper_jitter_entropy_good;
+
+    logic [5:0] output_buffer_control_reg;
     
 
     // This signal is muxed between input_pin_1 and output_pin_2
@@ -134,6 +138,8 @@ module control (
         temp_threshold_2 = internal_temp_threshold_2;
         temp_threshold_3 = internal_temp_threshold_3;
 
+        output_buffer_control = output_buffer_control_reg;
+
     end
 
     // Clock Mux
@@ -161,6 +167,7 @@ module control (
             write_debug_state <= 1'b0;
             new_debug_state_value <= 21'b0;
             send_trigger <= 1'b0;
+            output_buffer_control_reg <= 6'b001010; // Output buffer clock divider is divide by 5, Trivium enabled
 
         end
         else begin
@@ -175,8 +182,9 @@ module control (
                     if (spi_data[20]) begin // Read operation 
                         case (spi_data[19:16]) // Register Address
                             4'h0: data_to_send <= {1'b0, DEFAULT_STATE}; // Default state
-                            4'h1: data_to_send <= {1'b0, HALT_STATE};    // Halt state
-                            4'h2: data_to_send <= {1'b0, debug_state};   // Debug State
+                            4'h1: data_to_send <= {1'b0, debug_state};   // Debug State
+
+                            4'h2: data_to_send <= {1'b0, output_buffer_control_reg};    // Output buffer controls (trivium disable and clock divider)
 
                             4'h3: data_to_send <= {9'h0, internal_lower_latch_entropy_good}; // Entropy Status Latch [0:15]
                             4'h4: data_to_send <= {9'h0, internal_upper_latch_entropy_good}; // Entropy Status Latch [16:31]
@@ -203,6 +211,7 @@ module control (
                     else begin // Write operation
                         case (spi_data[19:16]) // Register Address                // This is a synchronous write since it affects the main FSM, but we treat it as an immediate update
                     // The main state machine will select debug_state on the next clock edge if 'debug' is high.
+                            4'h2: output_buffer_control_reg <= spi_data[5:0]; // Upper 5 bits are the output buffer slow clock denominator. LSB is Trivium disable (active high)
                             4'h7: internal_entropy_calibration <= spi_data[15:0]; // Calibration bits for latch, 0x04
                             4'h8: internal_temp_threshold_0 <= spi_data[13:0]; // Temp sensor 0 threshold, 0x05
                             4'h9: internal_temp_threshold_1 <= spi_data[13:0]; // Temp sensor 1 threshold, 0x06

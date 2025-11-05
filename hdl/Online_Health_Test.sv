@@ -20,11 +20,11 @@ import params::*;
 logic [$clog2(ENTROPY_SAMPLE)-1:0] entropy_counter, sample_cnt;
 logic [C_PERM-1:0] buff_reg;
 logic rep_fail, adaptive_fail, calibration_pass;
-logic [7:0] calibration_arr_n_curr, calibration_arr_p_curr, calibration_arr_n_next, calibration_arr_p_next;
-logic good_entropy_out;
+logic [5:0] calibration_arr_n_curr, calibration_arr_p_curr, calibration_arr_n_next, calibration_arr_p_next;
+logic good_entropy_out, good_entropy_out_flag;
 logic inter_fail;
 logic window;
-logic flag;
+logic flag, calib_flag;
 
 
 always_ff @( posedge clk ) begin
@@ -62,7 +62,7 @@ end
 always_ff @(posedge clk) begin
     if (rst) begin
         valid <= '0;
-    end else if (good_entropy_out) begin
+    end else if (good_entropy_out_flag) begin
         valid <= '1;
     end else begin
         // do nothing
@@ -74,8 +74,10 @@ always_ff @( posedge clk ) begin
         window <= '0;
     end else if (sample_cnt == 1023) begin
         window <= 1'b1;
+    end else if (calib_flag) begin
+        window <= '0;
     end else begin
-        window <= window;
+        window <= '0;
     end
 end
 
@@ -94,7 +96,7 @@ end
 always_ff @(posedge clk) begin
     if (rst) begin
         entropy_counter <= '0;
-    end else if(inter_fail || rep_fail || adaptive_fail || entropy_counter == 1023) begin
+    end else if(inter_fail || rep_fail || adaptive_fail || entropy_counter == 1023 || window) begin
         entropy_counter <= '0;
     end else if (adc_in == 1'b1 && !full) begin
         entropy_counter <= entropy_counter + 1;
@@ -114,14 +116,14 @@ always_ff @(posedge clk) begin
     end
 end
 
-assign calibration_arr_n = calibration_arr_n_curr[5:0];
-assign calibration_arr_p = calibration_arr_p_curr[5:0];
+assign calibration_arr_n = calibration_arr_n_curr;
+assign calibration_arr_p = calibration_arr_p_curr;
 
 always_ff @(posedge clk) begin
 
     if (rst) begin
-        calibration_arr_n_curr <= 8'b11000000;
-        calibration_arr_p_curr <= 8'b11000000;
+        calibration_arr_n_curr <= 6'b000000;
+        calibration_arr_p_curr <= 6'b000000;
     end else if (debug_mode) begin
         calibration_arr_n_curr <= spi_reg_lsb[11:6];
         calibration_arr_p_curr <= spi_reg_lsb[5:0];
@@ -132,63 +134,91 @@ always_ff @(posedge clk) begin
 
 end
 
+always_ff @(posedge clk) begin
+
+    if (rst) begin
+        good_entropy_out_flag <= '0;
+    end else if (good_entropy_out) begin
+        good_entropy_out_flag <= '1;
+    end else begin
+        // do nothing
+    end
+
+end
+
 always_comb begin
 
+    calib_flag = 1'b0;
     good_entropy_out = '0;
     adaptive_fail = '0;
     calibration_arr_n_next = calibration_arr_n_curr;
     calibration_arr_p_next = calibration_arr_p_curr;
-    if ((calibration_arr_n_curr == '0 || calibration_arr_p_curr == '0) && inter_fail && !full) begin
+    if (inter_fail && !full && calibration_arr_n_curr == '1 && calibration_arr_p_curr == '1) begin
         adaptive_fail = '1;
     end else if (inter_fail && !full) begin
         if (buff_reg[C_INTER-1:0] == '1) begin
-            calibration_arr_p_next = calibration_arr_p_curr - 2'b11;
+            calibration_arr_n_next = calibration_arr_n_curr + 2'b11;
+            calib_flag = 1'b0;
         end
         if (buff_reg[C_INTER-1:0] == '0) begin
-            calibration_arr_n_next = calibration_arr_n_curr - 2'b11;
+            calibration_arr_p_next = calibration_arr_p_curr + 2'b11;
+            calib_flag = 1'b0;
         end
-    end else if ((calibration_pass && window) || inter_fail && !full) begin
+    end else if ((calibration_pass && window) || inter_fail && !full && !good_entropy_out_flag) begin
 
             if (entropy_counter < 128 && entropy_counter >= 0) begin                // 0-12.5
+                calib_flag = 1'b1;
                 if (calibration_arr_p_curr != '1) begin
-                    calibration_arr_p_next = calibration_arr_p_curr + 8'h03;
-                end else if (calibration_arr_n_curr != '0) begin
-                    calibration_arr_n_next = calibration_arr_n_curr - 8'h03;
+                    calibration_arr_p_next = (calibration_arr_p_curr + 8'h03 > 6'b111111) ? '1 : calibration_arr_p_curr + 8'h03;
+                end else if (calibration_arr_n_curr != '1) begin
+                    calibration_arr_n_next = (calibration_arr_n_curr - 8'h03 < 0) ? '0 : calibration_arr_n_curr - 8'h03;
                 end
+                
             end else if (entropy_counter < 255 && entropy_counter >= 128) begin     // 12.5-25
+                calib_flag = 1'b1;
                 if (calibration_arr_p_curr != '1) begin
-                    calibration_arr_p_next = calibration_arr_p_curr + 8'h02;
-                end else if (calibration_arr_n_curr != '0) begin
-                    calibration_arr_n_next = calibration_arr_n_curr - 8'h02;
-                end
-            end else if (entropy_counter < 460 && entropy_counter >= 256) begin     // 25-45
-                if (calibration_arr_p_curr != '1) begin
-                    calibration_arr_p_next = calibration_arr_p_curr + 8'h01;
-                end else if (calibration_arr_n_curr != '0) begin
-                    calibration_arr_n_next = calibration_arr_n_curr - 8'h01;
-                end
-            end else if (entropy_counter < 563 && entropy_counter >= 461) begin     // 45-55
-                good_entropy_out = '1;
-            end else if (entropy_counter < 767 && entropy_counter >= 564) begin     // 55-75
-                if (calibration_arr_p_curr != '0) begin
-                    calibration_arr_p_next = calibration_arr_p_curr - 8'h01;
+                    calibration_arr_p_next = (calibration_arr_p_curr + 8'h02 > 6'b111111) ? '1 : calibration_arr_p_curr + 8'h02;
                 end else if (calibration_arr_n_curr != '1) begin
-                    calibration_arr_n_next = calibration_arr_n_curr + 8'h01;
-                end
-            end else if (entropy_counter < 895 && entropy_counter >= 768) begin     // 75-87.5
-                if (calibration_arr_p_curr != '0) begin
-                    calibration_arr_p_next = calibration_arr_p_curr - 8'h02;
-                end else if (calibration_arr_n_curr != '1) begin
-                    calibration_arr_n_next = calibration_arr_n_curr + 8'h02;
-                end
-            end else if (entropy_counter <= 1023 && entropy_counter >= 896)         // 87.5-100
-                if (calibration_arr_p_curr != '0) begin
-                    calibration_arr_p_next = calibration_arr_p_curr - 8'h03;
-                end else if (calibration_arr_n_curr != '1) begin
-                    calibration_arr_n_next = calibration_arr_n_curr + 8'h03;
+                    calibration_arr_n_next = (calibration_arr_n_curr - 8'h02 < 0) ? '0 : calibration_arr_n_curr - 8'h02;
                 end
 
-    end else begin
+            end else if (entropy_counter < 460 && entropy_counter >= 256) begin     // 25-45
+                calib_flag = 1'b1;
+                if (calibration_arr_p_curr != '1) begin
+                    calibration_arr_p_next = (calibration_arr_p_curr + 8'h01 > 6'b111111) ? '1 : calibration_arr_p_curr + 8'h01;
+                end else if (calibration_arr_n_curr != '1) begin
+                    calibration_arr_n_next = (calibration_arr_n_curr - 8'h01 < 0) ? '0 : calibration_arr_n_curr - 8'h01;
+                end
+
+            end else if (entropy_counter < 563 && entropy_counter >= 461) begin     // 45-55
+                good_entropy_out = '1;
+                calib_flag = 1'b0;
+            end else if (entropy_counter < 767 && entropy_counter >= 564) begin     // 55-75
+                calib_flag = 1'b1;
+                if (calibration_arr_n_curr != '1) begin
+                    calibration_arr_n_next = (calibration_arr_n_curr + 8'h01 > 6'b111111) ? '1 : calibration_arr_n_curr + 8'h01;
+                end else if (calibration_arr_p_curr != '1) begin
+                    calibration_arr_p_next = (calibration_arr_p_curr - 8'h01 < 0) ? '0 : calibration_arr_p_curr - 8'h01;
+                end
+
+            end else if (entropy_counter < 895 && entropy_counter >= 768) begin     // 75-87.5
+                calib_flag = 1'b1;
+                if (calibration_arr_n_curr != '1) begin
+                    calibration_arr_n_next = (calibration_arr_n_curr + 8'h02 > 6'b111111) ? '1 : calibration_arr_n_curr + 8'h02;
+                end else if (calibration_arr_p_curr != '1) begin
+                    calibration_arr_p_next = (calibration_arr_p_curr - 8'h02 < 0) ? '0 : calibration_arr_p_curr - 8'h02;
+                end
+
+            end else if (entropy_counter <= 1023 && entropy_counter >= 896)  begin       // 87.5-100
+                calib_flag = 1'b1;
+                if (calibration_arr_n_curr != '1) begin
+                    calibration_arr_n_next = (calibration_arr_n_curr + 8'h03 > 6'b111111) ? '1 : calibration_arr_n_curr + 8'h03;
+                end else if (calibration_arr_p_curr != '1) begin
+                    calibration_arr_p_next = (calibration_arr_p_curr - 8'h03 < 0) ? '0 : calibration_arr_p_curr - 8'h03;
+                end
+             end 
+    end
+    else begin
         // do nothing
     end
 end

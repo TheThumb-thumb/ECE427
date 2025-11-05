@@ -587,8 +587,8 @@ import le_types::*;
             count <= '0;
             byte_stream <= '0;
             if (stall) begin
-                internal_state <= internal_state;
-                byte_stream <= '0;
+                internal_state <= internal_state_next;
+                byte_stream <= z;
                 count <= count;
             end else if (state == GEN || state == DEBUG_GEN) begin
                 byte_stream <= z;

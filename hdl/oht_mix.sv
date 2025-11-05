@@ -10,7 +10,7 @@ localparam C_INTER = 22;
 localparam C_PERM = 32;
 localparam OUTREG_MAX_WIDTH = 64;
 
-module OHT
+module OHT_mix
 (
 
     input logic adc_in, // data value from entropy source

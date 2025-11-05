@@ -125,6 +125,8 @@ module top_debug_tb;
     logic [21:0] master_received;
 
     logic [383:0] conditioner_serial_input;
+    logic [383:0] entropy_sim_serial_input;
+    logic [11:0] entropy_sim_serial_input_short;
 
     // --- 0. Functions
     task reset_dut();
@@ -203,6 +205,7 @@ module top_debug_tb;
         reset_dut();
         master_received = 1'b0;
         tb_io_temp_debug = 1'b0;
+        tb_output_to_input_direct = 1'b0;
         #80;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -230,28 +233,46 @@ module top_debug_tb;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // ------------------- Try calibration bit write then read (Write then read reg 0x02) ----------------------
+        $display("\n --- Test: Write Output Buffer Control Bits ---");
+        test_word = 22'b1000100000000000100000; // Write 0x220020
 
-// ------------------- Test reading HALT STATE (Read reg 0x01)----------------------
-        $display("\n --- Test: Read HALT STATE ---");
-        test_word = 22'b1100010000000000000000;
-        
-        // Call the task to perform the transaction
+        // Call the write-only task
+        spi_write_only(test_word);
+
+        // Check results
+        if (tb_spi_data_ready) begin
+            @(negedge tb_spi_data_ready) // Wait for signal to go low
+            $display("Internal Entropy Calibration Bits: %h", dut.u_control.output_buffer_control_reg);
+            if (dut.u_control.output_buffer_control_reg == 6'h20) begin
+                $display("Output buffer write test PASSED ✓!");
+            end else begin
+                $display("Output buffer control bits write test FAILED ✘: Expected %h", 6'h20);
+            end
+        end else begin
+            $display("Output buffer control bits write test FAILED ✘: data_ready not high");
+        end
+        #80;
+
+
+        $display("\n --- Test: Read Output Buffer Control Bits ---");
+        test_word = 22'b1100100000000000000000; // Read output buffer control bits
+
         spi_write_read(test_word, master_received);
 
         // Check results
         if (tb_spi_data_ready) begin
             $display("Data received by master: %h", master_received);
-            if (master_received == 22'hED_BEF) begin 
-                $display("HALT STATE read test PASSED ✓!");
+            if (master_received[15:0] == dut.u_control.output_buffer_control_reg) begin
+                $display("Output buffer control bits read test PASSED ✓!");
             end else begin
-                $display("HALT STATE read test FAILED ✘: Expected %h", 22'hED_BEF);
+                $display("Output buffer control read test FAILED ✘: Expected %h, Got %h",
+                         dut.u_control.output_buffer_control_reg, master_received);
             end
         end else begin
-            $display("HALT STATE read test FAILED ✘: data_ready not high");
+            $display("Output buffer control read test FAILED ✘: data_ready not high");
         end
-        #20;
-
-
+        #20;        
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -659,6 +680,7 @@ module top_debug_tb;
 
         // Wait for the command to be processed
         // You may need a small delay or wait for spi_data_ready
+        $display("Curr state: %h", dut.u_control.curr_state); 
 
         // Check results
         if (tb_spi_data_ready) begin
@@ -675,19 +697,266 @@ module top_debug_tb;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-        // // ---------------- Set input 1 to conditioner
-        $display("\n --- Test: Set Input 1 to Conditioner ---");
+        // // ---------------- Set output 1 to latch entropy source 1, output 2 to clk
+        $display("\n --- Test: latch entropy source 1 ---");
 
         // Set up the command and the serial data
-        test_word = 22'b0_00_00000_00_00001_11_00000; // input to conditioner
+        test_word = 22'b0000000101000010000000; // output 1 from latch 1, output 2 from clk
+        entropy_sim_serial_input = 384'habcd1246785919274861929864973049acdbea167593057838820;
+        tb_debug = 1'b1;
+        // Send the SPI command
+        spi_write_only(test_word); // Set the mux
+
+        // Check results
+        if (tb_spi_data_ready) begin
+            // Wait for the command to propagate internally
+            @(posedge tb_ic_clk);
+            @(posedge tb_ic_clk);
+
+            // NOTE: Check your internal signal path. 
+            // 'curr_state' is probably not a TB signal.
+            $display("Curr state: %h", dut.u_control.curr_state); 
+            
+            // This check seems to compare an internal state with the command word.
+            // Adjust this if logic is different.
+            if (dut.u_control.next_state == test_word) begin
+                $display("Next state Test PASSED ✓!");
+            end else begin
+                $display("Next state FAILED ✘: Expected %h", test_word);
+            end
+            
+        end else begin
+            $display("Next state FAILED ✘: data_ready not high");
+        end
+
+        // Now, send the serial data on input_pin_1, driven by the main clock
+        for (int i=0; i<=383; i++) begin
+            tb_entropy_source_array[1] = entropy_sim_serial_input[i]; // MSB first
+            #10; // This delay should align with your main clock period
+                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+        end
+
+        tb_input_pin_1 = 1'b0; // Set pin low after transmission
+
+        #1000;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // // ---------------- Set output 1 to jitter entropy source 10, output 2 to clk
+        $display("\n --- Test: jitter entropy source 10 ---");
+
+        // Set up the command and the serial data
+        test_word = 22'b0000000110010100000000; // output from jitter 10 output 2 from clk
+        entropy_sim_serial_input = 384'habcd1246785919274861929864973049acdbea167593057838820;
+        tb_debug = 1'b1;
+        // Send the SPI command
+        spi_write_only(test_word); // Set the mux
+
+        // Check results
+        if (tb_spi_data_ready) begin
+            // Wait for the command to propagate internally
+            @(posedge tb_ic_clk);
+            @(posedge tb_ic_clk);
+
+            // NOTE: Check your internal signal path. 
+            // 'curr_state' is probably not a TB signal.
+            $display("Next state: %h", dut.u_control.curr_state); 
+            
+            // This check seems to compare an internal state with the command word.
+            // Adjust this if logic is different.
+            if (dut.u_control.next_state == test_word) begin
+                $display("Next state Test PASSED ✓!");
+            end else begin
+                $display("Next state FAILED ✘: Expected %h", test_word);
+            end
+            
+        end else begin
+            $display("Next state FAILED ✘: data_ready not high");
+        end
+
+        // Now, send the serial data on input_pin_1, driven by the main clock
+        for (int i=0; i<=383; i++) begin
+            tb_entropy_source_array[42] = entropy_sim_serial_input[i]; // MSB first
+            #10; // This delay should align with your main clock period
+                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+        end
+
+        tb_input_pin_1 = 1'b0; // Set pin low after transmission
+
+        #1000;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        reset_dut();
+        // // ---------------- Set output 2 to jitter entropy source 10, output 1 to clk, output to input into conditioner
+        $display("\n --- Test: jitter entropy source 10, directly into conditioner ---");
+        tb_output_to_input_direct = 1'b1;
+        tb_rand_req_type = RDSEED_64; // SEED JUST USES CONDITIONER
+
+        // Set up the command and the serial data
+        test_word = 22'b0100101000000011100000; // output 2 from jitter 10, goes into conditioner, output 1 from clk
         conditioner_serial_input = 384'h7b3a9f0e5c6d2814b7f8c9d0a3e5b6f7a8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c2e3f4a5b6c7d8e9f;
         tb_debug = 1'b1;
         // Send the SPI command
-        spi_write_only(test_word);
-        tb_rand_req_type = RDSEED_64;
+        spi_write_only(test_word); // Set the mux
+
+        // Check results
+        if (tb_spi_data_ready) begin
+            // Wait for the command to propagate internally
+            @(posedge tb_ic_clk);
+            @(posedge tb_ic_clk);
+
+            // NOTE: Check your internal signal path. 
+            // 'curr_state' is probably not a TB signal.
+            $display("Next state: %h", dut.u_control.curr_state); 
+            
+            // This check seems to compare an internal state with the command word.
+            // Adjust this if logic is different.
+            if (dut.u_control.next_state == test_word) begin
+                $display("Next state Test PASSED ✓!");
+            end else begin
+                $display("Next state FAILED ✘: Expected %h", test_word);
+            end
+            
+        end else begin
+            $display("Next state FAILED ✘: data_ready not high");
+        end
+
+        // Now, send the serial data on input_pin_1, driven by the main clock
+        for (int i=0; i<=383; i++) begin
+            tb_entropy_source_array[42] = conditioner_serial_input[i]; // MSB first
+            #10; // This delay should align with your main clock period
+                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+        end
+
+        #10000;
+        tb_output_to_input_direct = 1'b0;
 
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // // ---------------- Set output 1 to latch entropy source, loop over all, output 2 to clk
+        $display("\n --- Test: latch entropy source loop ---");
+
+        // Set up the command and the serial data
+        test_word = 22'b0000000101000000000000; // output 1 from latches, loop over all, output 2 from clk
+        entropy_sim_serial_input_short = 12'h0a4;
+        tb_debug = 1'b1;
+
+        for (int e_source = 0; e_source < 32; e_source++) begin
+            test_word[11:7]=e_source;
+            // Send the SPI command
+            spi_write_only(test_word); // Set the mux
+
+            // Check results
+            if (tb_spi_data_ready) begin
+                // Wait for the command to propagate internally
+                @(posedge tb_ic_clk);
+                @(posedge tb_ic_clk);
+
+
+                // NOTE: Check your internal signal path. 
+                // 'curr_state' is probably not a TB signal.
+                $display("Next state: %h", dut.u_control.curr_state); 
+                
+                // This check seems to compare an internal state with the command word.
+                // Adjust this if logic is different.
+                if (dut.u_control.next_state == test_word) begin
+                    $display("Next state Test PASSED ✓!");
+                end else begin
+                    $display("Next state FAILED ✘: Expected %h", test_word);
+                end
+                
+            end else begin
+                $display("Next state FAILED ✘: data_ready not high");
+            end
+
+            // Now, send the serial data on input_pin_1, driven by the main clock
+            for (int i=0; i<12; i++) begin
+                tb_entropy_source_array[e_source] = entropy_sim_serial_input_short[i]; // MSB first
+                #10; // This delay should align with your main clock period
+                    // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+            end
+
+        tb_input_pin_1 = 1'b0; // Set pin low after transmission
+
+        #100;
+        end
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // // ---------------- Set output 1 to jitter entropy source, loop over all, output 2 to clk
+        $display("\n --- Test: jitter entropy source loop ---");
+
+        // Set up the command and the serial data
+        test_word = 22'b0000000110000000000000; // output 1 from latches, loop over all, output 2 from clk
+        entropy_sim_serial_input_short = 12'h0a4;
+        tb_debug = 1'b1;
+
+        for (int e_source = 0; e_source < 32; e_source++) begin
+            test_word[11:7]=e_source;
+            // Send the SPI command
+            spi_write_only(test_word); // Set the mux
+
+            // Check results
+            if (tb_spi_data_ready) begin
+                // Wait for the command to propagate internally
+                @(posedge tb_ic_clk);
+                @(posedge tb_ic_clk);
+
+
+                // NOTE: Check your internal signal path. 
+                // 'curr_state' is probably not a TB signal.
+                $display("Next state: %h", dut.u_control.curr_state); 
+                
+                // This check seems to compare an internal state with the command word.
+                // Adjust this if logic is different.
+                if (dut.u_control.next_state == test_word) begin
+                    $display("Next state Test PASSED ✓!");
+                end else begin
+                    $display("Next state FAILED ✘: Expected %h", test_word);
+                end
+                
+            end else begin
+                $display("Next state FAILED ✘: data_ready not high");
+            end
+
+            // Now, send the serial data on input_pin_1, driven by the main clock
+            for (int i=0; i<12; i++) begin
+                tb_entropy_source_array[e_source+32] = entropy_sim_serial_input_short[i]; // MSB first
+                #10; // This delay should align with your main clock period
+                    // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+            end
+
+        tb_input_pin_1 = 1'b0; // Set pin low after transmission
+
+        #100;
+        end
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+        // // ---------------- Set input 1 to conditioner
+        $display("\n --- Test: Set Input 1 to Conditioner ---");
+        reset_dut();
+        $display("\n --- Reset Chip ---");
+
+        // Set up the command and the serial data
+        test_word = 22'b0_00_00000_00_00001_11_00000; // input to conditioner, output 1 clk, output 2 VDD
+        conditioner_serial_input = 384'h7b3a9f0e5c6d2814b7f8c9d0a3e5b6f7a8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c2e3f4a5b6c7d8e9f;
+        tb_debug = 1'b1;
+        // Send the SPI command
+        spi_write_only(test_word); // Set the mux
+        tb_rand_req_type = RDSEED_64; // SEED JUST USES CONDITIONER
 
         // Check results
         if (tb_spi_data_ready) begin
@@ -713,7 +982,7 @@ module top_debug_tb;
         end
 
         // Now, send the serial data on input_pin_1, driven by the main clock
-        for (int i=383; i>=0; i--) begin
+        for (int i=0; i<=383; i++) begin
             tb_input_pin_1 = conditioner_serial_input[i]; // MSB first
             #10; // This delay should align with your main clock period
                 // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
@@ -723,54 +992,55 @@ module top_debug_tb;
 
         #10000;
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         // // ---------------- Set input 1 to Trivium (also setting debug state)
-        $display("\n --- Test: Set Input 1 to Trivium ---");
+        // $display("\n --- Test: Set Input 1 to Trivium ---");
 
-        // Set up the command and the serial data
-        test_word = 22'b0_00_00000_00_00001_11_00001; // input to conditioner
-        conditioner_serial_input = 384'h7b3a9f0e5c6d2814b7f8c9d0a3e5b6f7a8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c2e3f4a5b6c7d8e9f;
-        tb_debug = 1'b1;
-        // Send the SPI command
-        spi_write_only(test_word);
-        tb_rand_req_type = RDRAND_16;
+        // // Set up the command and the serial data
+        // test_word = 22'b0_00_00000_00_00001_11_00001; // input to conditioner
+        // conditioner_serial_input = 384'h7b3a9f0e5c6d2814b7f8c9d0a3e5b6f7a8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c2e3f4a5b6c7d8e9f;
+        // tb_debug = 1'b1;
+        // // Send the SPI command
+        // spi_write_only(test_word);
+        // tb_rand_req_type = RDRAND_16;
 
 
-        // Check results
-        if (tb_spi_data_ready) begin
-            // Wait for the command to propagate internally
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
+        // // Check results
+        // if (tb_spi_data_ready) begin
+        //     // Wait for the command to propagate internally
+        //     @(posedge tb_ic_clk);
+        //     @(posedge tb_ic_clk);
+        //     @(posedge tb_ic_clk);
 
-            // NOTE: Check your internal signal path. 
-            // 'curr_state' is probably not a TB signal.
-            $display("Curr state: %h", dut.u_control.curr_state); 
+        //     // NOTE: Check your internal signal path. 
+        //     // 'curr_state' is probably not a TB signal.
+        //     $display("Curr state: %h", dut.u_control.curr_state); 
             
-            // This check seems to compare an internal state with the command word.
-            // Adjust this if logic is different.
-            if (dut.u_control.curr_state == test_word) begin
-                $display("Curr state Test PASSED ✓!");
-            end else begin
-                $display("Curr state FAILED ✘: Expected %h", test_word);
-            end
+        //     // This check seems to compare an internal state with the command word.
+        //     // Adjust this if logic is different.
+        //     if (dut.u_control.curr_state == test_word) begin
+        //         $display("Curr state Test PASSED ✓!");
+        //     end else begin
+        //         $display("Curr state FAILED ✘: Expected %h", test_word);
+        //     end
             
-        end else begin
-            $display("Curr state FAILED ✘: data_ready not high");
-        end
+        // end else begin
+        //     $display("Curr state FAILED ✘: data_ready not high");
+        // end
 
-        // Now, send the serial data on input_pin_1, driven by the main clock
-        for (int i=159; i>=0; i--) begin
-            tb_input_pin_1 = conditioner_serial_input[i]; // MSB first
-            #10; // This delay should align with your main clock period
+        // // Now, send the serial data on input_pin_1, driven by the main clock
+        // for (int i=159; i>=0; i--) begin
+        //     tb_input_pin_1 = conditioner_serial_input[i]; // MSB first
+        //     #10; // This delay should align with your main clock period
 
-        end
+        // end
 
-        tb_input_pin_1 = 1'b0; // Set pin low after transmission
+        // tb_input_pin_1 = 1'b0; // Set pin low after transmission
 
-        #1000000;
+        // #1000000;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////

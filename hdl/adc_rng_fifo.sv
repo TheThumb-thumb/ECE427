@@ -21,7 +21,7 @@ import params::*;
 
 
     logic [3:0] head_next, head_cur;
-    //  count_cur, count_next;
+    logic [3:0] count_cur, count_next;
     logic [ADC_FIF0_DEPTH-1:0] vector_cur;
     logic [ADC_FIF0_DEPTH-1:0] vector_next;
     logic overflow;

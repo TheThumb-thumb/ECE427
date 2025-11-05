@@ -28,6 +28,7 @@ module top_tb;
 	logic temp_out_valid;
 	logic [latch_sources-1:0][calib_bits-1:0] arr_n, arr_p;
 	logic [latch_sources-1:0] jitter_disable_arr;
+	logic spi_data_ready;
 
 	top dut(
 		.ic_clk(top_clk),
@@ -43,7 +44,7 @@ module top_tb;
 		.debug_clk(top_clk),
 		.mosi(mosi),
 		.miso(miso),
-		.spi_data_ready(),
+		.spi_data_ready(spi_data_ready),
 
 		.debug(debug),
 		.output_to_input_direct(1'b0),
@@ -51,6 +52,9 @@ module top_tb;
 		.output_pin_2(output_pin_2),
 		.output_pin_1(output_pin_1),
 		.input_pin_1(input_pin_1),
+
+		.temp_sens_in(4'b0000),
+		.io_temp_debug(1'b0),
 
 		.entropy_source_array(entropy_source_array),
 		.arr_n(arr_n),

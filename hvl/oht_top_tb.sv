@@ -130,26 +130,42 @@ initial rst = 1'b0;
     assign spi_reg_lsb = '0;
 
     logic [9:0] count, latch_count;
+    logic [31:0][1023:0] temp0, temp1;
+    logic [1023:0] temp2;
 
-    // always_ff @(posedge clk) begin
-    //     // for (int i = 0; i < es_sources; i++) begin
-    //     //     ES_in[i] <= $urandom_range(0,1);
-    //     // end
-    //     if (rst) begin
-    //         for (int i = 0; i < es_sources; i++) begin
-    //             ES_in[i] <= test_vec[100][0];  // this is your biased input and then adjust to calibration after
-    //         end
-    //         count <= '0;
-    //         latch_count <= '0;
-    //     end else if (count == 1023) begin
-    //         for(int i = 0; i < latch_sources; i++) begin
-    //             ES_in[i] = test_vec[arr_p[i]][latch_count];
-    //         end
-    //         latch_count <= latch_count+1;
-    //     end else begin
-    //         count <= count + 1;
-    //     end
-    // end
+    always_ff @(posedge clk) begin
+        // for (int i = 0; i < es_sources; i++) begin
+        //     ES_in[i] <= $urandom_range(0,1);
+        // end
+        if (rst) begin
+            for (int i = 0; i < es_sources; i++) begin
+                ES_in[i] <= test_vec[100][0];  // this is your biased input and then adjust to calibration after
+                temp0[i] <= '0;
+                temp1[i] <= '0;
+            end
+            temp2 <= '0;
+            count <= '0;
+            latch_count <= '0;
+            
+        end else if (count == 1023) begin
+            for(int i = 0; i < latch_sources; i++) begin
+                // temp0[i] <= test_vec[arr_n[i]* 1.5625];
+                // temp1[i] <= test_vec[arr_p[i]* 1.5625];
+                int idx_n, idx_p;
+                idx_n = int'(arr_n[i] * 1.5625);
+                idx_p = int'(arr_p[i] * 1.5625);
+                // temp0[i] <= test_vec[100 - idx_n];
+                // temp1[i] <= test_vec[idx_p];
+                // temp2 <= temp1 + temp0;
+                temp2 <= (idx_p - idx_n < 0) ? '0 : (idx_p - idx_n) / 2;
+                ES_in[i] <= test_vec[temp2][latch_count];
+            end
+            latch_count <= latch_count+1;
+
+        end else begin
+            count <= count + 1;
+        end
+    end
 
     oht_top dut (
         .clk(clk),
@@ -170,38 +186,29 @@ initial rst = 1'b0;
 
     );
 
-    // always_ff @(posedge clk) begin
-    //         // for (int i = 0; i < es_sources; i++) begin
-    //         //     ES_in[i] <= $urandom_range(0,1);
-    //         // end
-    //     end
-
     initial begin
 		$fsdbDumpfile("oht_top_dump.fsdb");
 		$fsdbDumpvars(0, "+all");
 		rst = 1'b1;
-        if (rst) begin
-            for (int i = 0; i < es_sources; i++) begin
-                ES_in[i] = test_vec[100][0];  // this is your biased input and then adjust to calibration after
-            end
-            count = '0;
-            latch_count = '0;
-        end 
+        // if (rst) begin
+        //     for (int i = 0; i < es_sources; i++) begin
+        //         ES_in[i] = test_vec[100][0];  // this is your biased input and then adjust to calibration after
+        //     end
+        //     count = '0;
+        //     latch_count = '0;
+        // end
+
         #10ns
 		rst = 1'b0;
-        forever begin
-            #1ns;
-            // if (count == 1023) begin
-                for(int i = 0; i < latch_sources; i++) begin
-                    ES_in[i] = test_vec[arr_n[i]][latch_count];
-                end
-                latch_count = latch_count+1;
-                if (latch_count == 1023) break;
-            // end else begin
-                // count = count + 1;
-            // end
-            #1ns;
-        end
+        // forever begin
+        //     #1ns;
+        //         for(int i = 0; i < latch_sources; i++) begin
+        //             ES_in[i] <= test_vec[arr_n[i]][latch_count];
+        //         end
+        //         latch_count <= latch_count+1;
+        //         if (latch_count == 1023) break;
+        //     #1ns;
+        // end
 		#100000ns
 		$finish();
 	end

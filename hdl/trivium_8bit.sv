@@ -1,4 +1,4 @@
-module trivium 
+module trivium_8bit
 import params::*;
 import le_types::*;
 #(

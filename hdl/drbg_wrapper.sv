@@ -187,10 +187,10 @@ always_comb begin
 
         W_RUN: begin
             // If downstream can accept (either empty or will consume next),
-            // and the core is idle (done_o just completed the last block), set another 1 block generate.
+            // (this is ignoring seed stretching from debug wrapper )and the core is idle (done_o just completed the last block), set another 1 block generate.
             if (!out_valid_o || (out_valid_o && out_ready_i)) begin
                 if (blocks_since_reseed >= RESEED_INTERVAL) begin
-                    state_n = W_RESEED_REQ;
+                    state_n = W_RESEED_REQ; // have to add signal padding when looking at the serial input from debug 
                 end else if (!drbg_busy) begin
                     generate_pulse = 1'b1;
                 end

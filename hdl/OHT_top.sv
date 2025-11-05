@@ -58,6 +58,7 @@ logic [latch_sources-1:0] buff_in;
 assign rd_good_arr = ~fail_arr & valid_arr;
 assign es_out_jitter = ES_in[63:32];
 assign es_out_latch = ES_in[31:0];
+
 // we have a valid array that specifies which bits that are read out should actually be considered in the sram read buffer
 // we have a fail arr that says that we should definitely not be considering the outputs of these sources at all anymore
 // we have two different logic arrays for latch and jitter that have the output of each es that we need to write into sram
@@ -105,8 +106,10 @@ always_ff @(posedge clk) begin
         end else if (cnt == 2047 && valid_arr[63:32] != '0) begin
             cnt <= '0;
             latch_jitter_flag <= ~latch_jitter_flag; // if low then even addresses -> latch
-        end else begin
+        end else if (valid_arr != '0) begin
             cnt <= cnt + 2;
+        end else begin
+            // do nothing
         end
     end
 end

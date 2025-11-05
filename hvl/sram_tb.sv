@@ -48,7 +48,7 @@ assign TAA = '0;
 assign TDA = '0;
 assign TQA = '0;
 
-oht_dp_sram dut (
+oht_dp_sram_not_tcc dut (
     // outputs:
     // A
     .CENYA(CENYA),
@@ -108,7 +108,7 @@ initial begin
     $fsdbDumpfile("sram_dump.fsdb");
     $fsdbDumpvars(0, "+all");
     rst = 1'b1;
-    #10ns
+    #10000ns
     rst = 1'b0;
     #100000ns
     $finish();

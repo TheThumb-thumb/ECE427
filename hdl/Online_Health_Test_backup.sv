@@ -1,4 +1,4 @@
-module OHT
+module OHT_backup
 import le_types::*;
 import params::*;
 (
@@ -27,7 +27,8 @@ logic [7:0] calibration_arr_n_curr, calibration_arr_n_next, calibration_arr_p_cu
 logic good_entropy_out;
 logic enq_flag, enq_flag_next;
 logic calib_flag, calib_flag_next;
-logic inter_fail
+logic inter_fail;
+logic full;
 
 // logic inter_fail_reg, inter_fail_next;
 
@@ -115,7 +116,7 @@ end
 always_ff @(posedge clk) begin
 
     if (rst) begin
-        buff_reg <= 'x;
+        buff_reg <= '0;
         noise_counter <= '0;
     end else begin
         noise_counter <= noise_counter + 1;

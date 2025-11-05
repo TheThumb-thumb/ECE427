@@ -1,41 +1,40 @@
 import le_types::*;
 import params::*;
 module top_io (
-// System CLK and RST pins:
-input logic ic_clk_io,                             // input clock pin
-input logic rst_n_io,                              // input reset pin
+    // System CLK and RST pins:
+    input logic ic_clk_io,                             // input clock pin
+    input logic rst_n_io,                              // input reset pin
 
-// Rand request and output pins:
-input logic rand_req_io,                           // input valid request pin
-input rand_req_t rand_req_type_io,                 // 3 input pins for types of random #s requested
-output logic [OUTPUT_WIDTH-1:0] rand_byte_io,      // 16 output pins from buffer with random #s requested
-output logic rand_valid_io,                        // output pin for rand #s valid
-output logic slow_clk_io,                          // output clk
+    // Rand request and output pins:
+    input logic rand_req_io,                           // input valid request pin
+    input rand_req_t rand_req_type_io,                 // 3 input pins for types of random #s requested
+    output logic [OUTPUT_WIDTH-1:0] rand_byte_io,      // 16 output pins from buffer with random #s requested
+    output logic rand_valid_io,                        // output pin for rand #s valid
+    output logic slow_clk_io,                          // output clk
 
-// SPI Pins
-input logic ss_n_io,       // Slave Select (active low)
-input logic debug_clk_io,  // Debug clock from FPGA
-input logic mosi_io,       // Master Out Slave In
-output logic miso_io,      // Master In Slave Out
-output logic spi_data_ready_io, //This will be useful for SPI communication
+    // SPI Pins
+    input logic ss_n_io,       // Slave Select (active low)
+    input logic debug_clk_io,  // Debug clock from FPGA
+    input logic mosi_io,       // Master Out Slave In
+    output logic miso_io,      // Master In Slave Out
+    output logic spi_data_ready_io, //This will be useful for SPI communication
 
-// Debug pins
-input logic debug_io,
-input logic output_to_input_direct_io,
-input logic input_pin_1_io,
-output logic output_pin_2_io,
-output logic output_pin_1_io,
+    // Debug pins
+    input logic debug_io,
+    input logic output_to_input_direct_io,
+    input logic input_pin_1_io,
+    output logic output_pin_2_io,
+    output logic output_pin_1_io,
 
-input logic[3:0] temp_sens_in, // 0 -> bottom right 1 -> bottom left 2 -> top left 3 -> top right
+    input logic[3:0] temp_sens_in, // 0 -> bottom right 1 -> bottom left 2 -> top left 3 -> top right
+    input logic     io_temp_debug,
 
-// //Temp pins for verification (no output buffer or entropy)
-input logic [es_sources-1:0] entropy_source_array,
-// output logic [256:0] temp_seed_out,
-// output logic [127:0] temp_drbg_out,
-// output logic temp_out_valid
-output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
-output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
-output logic [jitter_sources-1:0] jitter_disable_arr
+    // Temp pins for verification (pretent to be entropy sources and temp sensor since no mixed signal)
+    input logic [es_sources-1:0] entropy_source_array,
+    output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
+    output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
+    output logic [jitter_sources-1:0] jitter_disable_arr,
+    output logic [13:0] temp_threshold_array [4]
 );
 
 // TOTAL PIN COUNT: 38 pins
@@ -54,7 +53,7 @@ output logic [jitter_sources-1:0] jitter_disable_arr
 // logics for I/O Module
 logic ic_clk;                             // input clock pin
 logic rst_n;                              // input reset pin
-
+logic rst_n_reg;
 // Rand request and output pins:
 logic rand_req;                           // input valid request pin
 rand_req_t rand_req_type;                 // 3 input pins for types of random #s requested
@@ -75,6 +74,12 @@ logic output_to_input_direct;
 logic input_pin_1;
 logic output_pin_2;
 logic output_pin_1;
+
+always_ff @(posedge ic_clk) begin
+
+    rst_n_reg <= rst_n;
+
+end
 
 // INPUT BUFFERS
 io_in in_ic_clk (
@@ -129,7 +134,7 @@ io_in in_input_pin_1 (
 // OUTPUT BUFFERS:
 genvar i;
 generate
-    for(i=0; i < OUTPUT_WIDTH; ++i) begin
+    for(i = 0; i < OUTPUT_WIDTH; ++i) begin
         io_out out_rand_byte (
             .chipout(rand_byte_io[i]),
             .chipin(rand_byte[i])
@@ -160,7 +165,7 @@ io_out out_output_pin_1 (
 
 top mixed_IC (
     .ic_clk(ic_clk),
-    .rst_n(rst_n),
+    .rst_n(rst_n_reg),
 
     .rand_req(rand_req),
     .rand_req_type(rand_req_type),
@@ -182,12 +187,13 @@ top mixed_IC (
     .input_pin_1(input_pin_1),
 
     .temp_sens_in(temp_sens_in),
-    .io_temp_debug(),
+    .io_temp_debug(io_temp_debug),
     
     .entropy_source_array(entropy_source_array),
     .arr_n(arr_n),
     .arr_p(arr_p),
-    .jitter_disable_arr(jitter_disable_arr)
+    .jitter_disable_arr(jitter_disable_arr),
+    .temp_threshold_array(temp_threshold_array)
 );
 
 endmodule
