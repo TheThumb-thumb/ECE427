@@ -37,16 +37,28 @@ module top (
     output logic output_pin_1,
     input logic input_pin_1,
 
+    //Pins that connect to manual layout components (Entropy sources, temp sensor)
+
     // Temperature sensor I/O
     input logic[3:0] temp_sens_in, // 0 -> bottom right 1 -> bottom left 2 -> top left 3 -> top right
     input logic io_temp_debug,
+    output logic [TEMP_WIDTH-1:0] temp_threshold_array_0,
+    output logic [TEMP_WIDTH-1:0] temp_threshold_array_1,
+    output logic [TEMP_WIDTH-1:0] temp_threshold_array_2,
+    output logic [TEMP_WIDTH-1:0] temp_threshold_array_3,
+    input  logic [TEMP_WIDTH-1:0] temp_counter_0,
+    input  logic [TEMP_WIDTH-1:0] temp_counter_1,
+    input  logic [TEMP_WIDTH-1:0] temp_counter_2,
+    input  logic [TEMP_WIDTH-1:0] temp_counter_3,
 
-    // Temp pins for verification (pretent to be entropy sources and temp sensor since no mixed signal)
+    //Entropy Sources I/O
     input logic [es_sources-1:0] entropy_source_array,
     output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
     output logic [jitter_sources-1:0] jitter_disable_arr,
-    output logic [13:0] temp_threshold_array [4]
+
+    output logic analog_clk
+
 
 );
     logic output_stall_temp;
@@ -87,18 +99,16 @@ module top (
 
     // Wires to connect control to other modules (from control)
     logic        clk;
-    logic        latch_entropy_mux_out; // Serial debug output from selected latch entropy source
-    logic        jitter_entropy_mux_out; // Serial debug output from selected latch entropy source
-    logic [15:0] entropy_calibration; // Entropy calibration value for debug
-    logic        latch_oht_mux_out; // Serial debug output from selected latch OHT
-    logic        jitter_oht_mux_out; // Serial debug output from selected jitter OHT
-    logic        latch_oht_mux_in; // Serial debug input to selected latch OHT
-    logic        jitter_oht_mux_in; // Serial debug input to selected jitter OHT
-    logic        CTD_debug_input; // Serial debug input to conditioner/trivium/DRBG
-    logic [13:0] temp_counter_0, temp_counter_1, temp_counter_2, temp_counter_3; // Counters for temp sensors, verify w Anthony
-    logic [15:0] lower_latch_entropy_good, upper_latch_entropy_good, lower_jitter_entropy_good, upper_jitter_entropy_good; // One-hot status bits for entropy sources
-    logic [5:0] output_buffer_control; // Output buffer clock divider and Trivium disable
-    logic [21:0] curr_state; // Contains all the info for 
+    logic        latch_entropy_mux_out;     // Serial debug output from selected latch entropy source
+    logic        jitter_entropy_mux_out;    // Serial debug output from selected latch entropy source
+    logic [11:0] entropy_calibration;       // Entropy calibration value for debug
+    logic        latch_oht_mux_out;         // Serial debug output from selected latch OHT
+    logic        jitter_oht_mux_out;        // Serial debug output from selected jitter OHT
+    logic        latch_oht_mux_in;          // Serial debug input to selected latch OHT
+    logic        jitter_oht_mux_in;         // Serial debug input to selected jitter OHT
+    logic        CTD_debug_input;           // Serial debug input to conditioner/trivium/DRBG
+    logic [21:0] curr_state;                // Contains all the info for directing debug states
+    logic [5:0] output_buffer_control;      // Directs output buffer behaviour
 
     // MUX port declarations
     logic [31:0] latch_oht_default_in; // Direct input connection to latch OHT
@@ -141,10 +151,10 @@ module top (
         .temp_counter_2(temp_counter_2),
         .temp_counter_3(temp_counter_3),
 
-        .temp_threshold_0(temp_threshold_array[0]),  // Thresholds for temp sensors
-        .temp_threshold_1(temp_threshold_array[1]),
-        .temp_threshold_2(temp_threshold_array[2]),
-        .temp_threshold_3(temp_threshold_array[3]),
+        .temp_threshold_0(temp_threshold_array_0),  // Thresholds for temp sensors
+        .temp_threshold_1(temp_threshold_array_1),
+        .temp_threshold_2(temp_threshold_array_2),
+        .temp_threshold_3(temp_threshold_array_3),
 
         .io_temp_debug(io_temp_debug), //Disable temp sensors from halting
 
@@ -153,15 +163,17 @@ module top (
         .temp_sense_2_good(temp_sens_in[2]),
         .temp_sense_3_good(temp_sens_in[3]),
 
-        .lower_latch_entropy_good(lower_latch_entropy_good),
-        .upper_latch_entropy_good(upper_latch_entropy_good),
-        .lower_jitter_entropy_good(lower_jitter_entropy_good),
-        .upper_jitter_entropy_good(upper_jitter_entropy_good),
+        .lower_latch_entropy_good(rd_good_arr[15:0]),
+        .upper_latch_entropy_good(rd_good_arr[31:16]),
+        .lower_jitter_entropy_good(rd_good_arr[47:32]),
+        .upper_jitter_entropy_good(rd_good_arr[63:48]),
 
         .output_buffer_control(output_buffer_control),
 
         .curr_state(curr_state)
     );
+
+    assign analog_clk = clk; 
 
     
     // Mux between Latch Entropy Sources and Latch OHT. This 
@@ -219,7 +231,7 @@ module top (
         .ES_in(entropy_source_array),
         .deque(oht_cond_ready),
         .debug_mode(debug),
-        .spi_reg_lsb(curr_state[15:0]),
+        .spi_reg_lsb(entropy_calibration),
 
         .cond_out({key,message}),
         .full(oht_cond_valid),
@@ -273,6 +285,8 @@ module top (
     logic triv_debug;
     assign triv_debug = (curr_state[6:0] == 7'b1100001 && debug) ? 1'b1 : 1'b0;
 
+
+
     //Instantiate Trivium:
     trivium_top tri_state ( 
         .clk(clk),
@@ -291,6 +305,8 @@ module top (
         .rrand_out(triv_out)
     );
 
+
+    assign drbg_debug = (curr_state[6:0] == 7'b1100010 && debug); 
     ctr_drbg_wrapper #(
         .KEY_BITS (128),
         .SEED_BITS (256),
@@ -305,14 +321,18 @@ module top (
         .seed_i              (seed),                   // <- conditioner 
 
 
-      // Streaming output to buffer ready/valid   
-      .out_valid_o(drbg_random_valid), // drive buffer valid
-      .out_ready_i(drbg_output_ready), // buffer ready
-      .out_data_o(drbg_random_block), //128b data into buffer
+        // Streaming output to buffer ready/valid   
+        .out_valid_o(drbg_random_valid), // drive buffer valid
+        .out_ready_i(drbg_output_ready), // buffer ready
+        .out_data_o(drbg_random_block), //128b data into buffer
 
-      // unconnected shit
-      .busy_o(),        
-      .blocks_since_reseed_o()
+        // debug
+        .drbg_debug_mode_i(drbg_debug),
+        .drbg_serial_i(CTD_debug_input),
+
+        // unconnected shit
+        .busy_o(),        
+        .blocks_since_reseed_o()
     );
 
     // Instantiate the output buffer
@@ -343,6 +363,8 @@ module top (
         .slow_clk(slow_clk),
 
         // stall output buffer if temperature sensor violations:
+        .debug(debug),
+        .output_buffer_control(output_buffer_control),
         .output_stall_temp(output_stall_temp),
         .triv_debug(triv_debug)
     );

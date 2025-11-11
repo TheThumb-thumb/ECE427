@@ -77,22 +77,27 @@ module top_tb;
 	initial begin
 		debug = 1'b0;
 		rand_req = 1'b1;
-
-		forever begin 
-			@(posedge slow_clk) begin
-				if(shorts_received == shorts_received_max) begin
-					case ($urandom_range(5, 0))
-						0: rand_req_type = RDSEED_16;
-						1: rand_req_type = RDRAND_16;
-						2: rand_req_type = RDSEED_32;
-						3: rand_req_type = RDRAND_32;
-						4: rand_req_type = RDSEED_64;
-						5: rand_req_type = RDRAND_64;
-						default: rand_req_type = RDRAND_16;
-					endcase
-				end
-			end
+		
+		rand_req_type = RDRAND_64;
+		forever begin
+			@(posedge slow_clk);
 		end
+
+		// forever begin 
+		// 	@(posedge slow_clk) begin
+		// 		if(shorts_received == shorts_received_max) begin
+		// 			case ($urandom_range(5, 0))
+		// 				0: rand_req_type = RDSEED_16;
+		// 				1: rand_req_type = RDRAND_16;
+		// 				2: rand_req_type = RDSEED_32;
+		// 				3: rand_req_type = RDRAND_32;
+		// 				4: rand_req_type = RDSEED_64;
+		// 				5: rand_req_type = RDRAND_64;
+		// 				default: rand_req_type = RDRAND_16;
+		// 			endcase
+		// 		end
+		// 	end
+		// end
 	end
 
 	//Monitor output pins, verify that no extra bytes are being served

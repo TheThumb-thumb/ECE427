@@ -17,6 +17,7 @@ package params;
     localparam sram_addr = 2048;
     localparam sram_word = 32;
     localparam OUTPUT_WIDTH = 16;
+    localparam TEMP_WIDTH = 14;
 endpackage : params
 
 package le_types;

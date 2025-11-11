@@ -17,6 +17,8 @@ module output_buffer #(
     input  logic        rst_n,
     input  logic        output_stall_temp,
     input  logic        triv_debug, // debug register is trying to stall debug
+    input  logic        debug, 
+    input  logic [5:0]  output_buffer_control,
 
     //Connections to DRBG and Conditioner
     input logic                     seed_valid_i, 
@@ -68,7 +70,7 @@ localparam TRIV_INS_PER_BUFFER = (128 / 64);
 logic [127:0] rdrand_buffer;
 logic [3:0] rand_counter;
 logic [5:0] rdrand_request_counter;
-logic triv_mode;
+logic triv_mode, triv_mode_true;
 logic rdrand_valid;
 
 //Misc + for both
@@ -76,15 +78,27 @@ output_buffer_state_t ob_cur_state, ob_next_state;
 logic [2:0] out_counter;
 logic extended_rst_n;
 
+//Drive registers based on if debug mode is active
+logic [4:0] slow_clk_threshold;
+always_comb begin
+    if(debug && output_buffer_control[5:1] != '0) begin
+        slow_clk_threshold = output_buffer_control[5:1];
+        triv_mode_true = output_buffer_control[0];
+    end else begin
+        slow_clk_threshold = 4;
+        triv_mode_true = triv_mode;
+    end
+end 
+
 //Need to drive outputs at a slow clock of 100 MHz, or clk/5
-logic [2:0] slow_clk_counter;
+logic [4:0] slow_clk_counter;
 always_ff @ (posedge clk) begin
     if(!rst_n) begin
         slow_clk_counter <= '0;
         slow_clk <= '0;
         extended_rst_n <= '0;
     end else begin
-        if(slow_clk_counter == 4) begin
+        if(slow_clk_counter == slow_clk_threshold) begin
             slow_clk_counter <= '0;
             slow_clk <= ~slow_clk;
             if(!extended_rst_n && slow_clk) extended_rst_n <= '1;
@@ -168,7 +182,7 @@ always_comb begin
     case (rdrand_cur_state)
         RDRAND_BUF_INVALID: begin
             if(!rdrand_valid) begin
-                if(triv_mode) rdrand_next_state = RDRAND_LOAD_TRIV;
+                if(triv_mode_true) rdrand_next_state = RDRAND_LOAD_TRIV;
                 else rdrand_next_state = RDRAND_LOAD_DRBG;
             end
         end RDRAND_LOAD_DRBG: begin
@@ -261,29 +275,30 @@ always_comb begin
     rand_valid = 1'b0;
     rand_byte = '0;
     ob_next_state = ob_cur_state;
-
-    case(ob_cur_state)
-        OUTPUT_IDLE: begin
-            if(rand_req) begin
-                if(req_is_rdrand) ob_next_state = OUTPUT_RAND;
-                else ob_next_state = OUTPUT_SEED;
+    if(!output_stall_temp) begin
+        case(ob_cur_state)
+            OUTPUT_IDLE: begin
+                if(rand_req) begin
+                    if(req_is_rdrand) ob_next_state = OUTPUT_RAND;
+                    else ob_next_state = OUTPUT_SEED;
+                end
+            end OUTPUT_SEED: begin
+                if(rdseed_valid) begin
+                    rand_byte = rdseed_queue[seed_queue_tail_i][OUTPUT_WIDTH * seed_counter +: OUTPUT_WIDTH];
+                    rand_valid = 1'b1;
+                    if(out_counter == '0) ob_next_state = OUTPUT_IDLE;
+                end
+            end OUTPUT_RAND: begin
+                if(rand_counter != 4'd8 && rdrand_valid) begin
+                    rand_byte = rdrand_buffer[OUTPUT_WIDTH * rand_counter +: OUTPUT_WIDTH];
+                    rand_valid = 1'b1;
+                    if(out_counter == '0) ob_next_state = OUTPUT_IDLE;
+                end
+            end default: begin
+                
             end
-        end OUTPUT_SEED: begin
-            if(rdseed_valid) begin
-                rand_byte = rdseed_queue[seed_queue_tail_i][OUTPUT_WIDTH * seed_counter +: OUTPUT_WIDTH];
-                rand_valid = 1'b1;
-                if(out_counter == '0) ob_next_state = OUTPUT_IDLE;
-            end
-        end OUTPUT_RAND: begin
-            if(rand_counter != 4'd8 && rdrand_valid) begin
-                rand_byte = rdrand_buffer[OUTPUT_WIDTH * rand_counter +: OUTPUT_WIDTH];
-                rand_valid = 1'b1;
-                if(out_counter == '0) ob_next_state = OUTPUT_IDLE;
-            end
-        end default: begin
-            
-        end
-    endcase
+        endcase
+    end
 end
 
 

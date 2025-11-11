@@ -1,4 +1,4 @@
-module oht_top
+module oht_top_test
 import le_types::*;
 import params::*;
 (
@@ -8,7 +8,7 @@ import params::*;
     input logic [es_sources-1:0] ES_in, // 0-31 latch 32-63 jitter
     input logic deque,                  // tells us aes is reading? Does that matter?
     input logic debug_mode,
-    input logic [11:0] spi_reg_lsb,
+    input logic [15:0] spi_reg_lsb,
 
     output logic [cond_width-1:0] cond_out,
     output logic full,
@@ -17,7 +17,8 @@ import params::*;
     output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
     output logic [jitter_sources-1:0] j_disable_arr,
-    output logic [es_sources-1:0] rd_good_arr
+    output logic [es_sources-1:0] rd_good_arr,
+    output logic [latch_sources-1:0] good_entropy_out
 
 );
 
@@ -29,22 +30,21 @@ logic [jitter_sources-1:0] es_out_jitter;
 logic [latch_sources-1:0] mask_in;
 
 // disregard A outputs unless debug needs them?
-// logic CENYA, WENYA, PENYA;
-// logic [$clog2(sram_addr)-1:0] AYA;
-// logic [sram_word-1:0] DYA, QIA, QA;
+logic CENYA, WENYA, PENYA;
+logic [$clog2(sram_addr)-1:0] AYA;
+logic [sram_word-1:0] DYA, QIA, QA;
 
 // outputs of port B only regard when flag is high
-// logic CENYB, WENYB, PENYB;
-// logic [$clog2(sram_addr)-1:0] AYB;
-// logic [sram_word-1:0] DYB, QIB, 
-logic [sram_word-1:0] QB;
+logic CENYB, WENYB, PENYB;
+logic [$clog2(sram_addr)-1:0] AYB;
+logic [sram_word-1:0] DYB, QIB, QB;
 
 // these are test input vectors I believe, will useful once debug is implemented for this but for now it is set to 0
 logic [$clog2(sram_addr)-1:0] TAA, TAB;
 logic [sram_word-1:0] TDA, TQA, TDB, TQB;
 
 // we are never writing in port B so DB can be whatever
-// logic [sram_word-1:0] DB;
+logic [sram_word-1:0] DB;
 
 sram_dp_reg_t rd_reg, rd_reg1, rd_reg_next, rd_reg_out, wr_reg, wr_reg1, wr_reg_next, wr_reg_out;
 logic [$clog2(sram_addr)-1:0] cnt, read_cnt;
@@ -53,6 +53,7 @@ logic latch_jitter_flag, latch_jitter_flag_rd;
 logic read_cnt_flag;
 
 logic enque, shifter_rdy;
+logic [5:0] num_good_bits_debug;
 logic [latch_sources-1:0] buff_in;
 
 assign rd_good_arr = ~fail_arr & valid_arr;
@@ -178,7 +179,7 @@ end
 genvar i;
 generate
     for (i = 0; i < 32; i++) begin : gen_latch
-        OHT latch_inst (
+        OHT_test latch_inst (
             .adc_in(ES_in[i]),
             .clk(clk),
             .rst(rst),
@@ -189,7 +190,8 @@ generate
             .perm_fail(fail_arr[i]),
             .valid(valid_arr[i]),
             .calibration_arr_n(arr_n[i]),
-            .calibration_arr_p(arr_p[i])
+            .calibration_arr_p(arr_p[i]),
+            .good_entropy_out(good_entropy_out[i])
         );
     end
     for (i = 0; i < 32; i++) begin : gen_jitter
@@ -214,7 +216,8 @@ streaming_bit_compactor shifter (
     .mask_in(mask_in),
     .valid_in(rd_reg_out.flag),
     .data_out(buff_in),
-    .valid_out(shifter_rdy)
+    .valid_out(shifter_rdy),
+    .num_good_bits_debug(num_good_bits_debug)
 );
 
 que_fiao sram_aes_buff (
@@ -234,86 +237,59 @@ que_fiao sram_aes_buff (
 // PORTA Write ONLY
 // PORTB Read ONLY
 
-logic CENA, WENA, TENA, BENA, TCENA, TWENA, PENA, TPENA, CENB, WENB, TENB, BENB, TCENB, TWENB, PENB, TPENB;
-logic [2:0] EMAA, EMAB;
-logic sram_clk, sram_rst;
-
-assign CENA = 1'b0;
-assign WENA = 1'b0;
-assign EMAA = 3'b000;
-assign TENA = 1'b1;
-assign BENA = 1'b1;
-assign TCENA = 1'b0;
-assign TWENA = 1'b0;
-assign PENA = 1'b0;
-assign TPENA = 1'b0;
-assign CENB = 1'b0;
-assign WENB = 1'b1;
-assign EMAB = 3'b000;
-assign TENB = 1'b1;
-assign BENB = 1'b1;
-assign TCENB = 1'b0;
-assign TWENB = 1'b0;
-assign PENB = 1'b0;
-assign TPENB = 1'b0;
-assign sram_clk = clk;
-assign sram_rst = rst;
-
 oht_dp_sram_not_tcc_correct rng_storage(
     // outputs:
     // A
-    .CENYA(),  // here but empty ,not unconnected
-    .WENYA(),  // here but empty ,not unconnected
-    .AYA(),      // here, unconeccted
-    .DYA(),      // here, unconnected
-    .QA(),        // here, unconnected
-    .QIA(),      // here, unconnected
-    .PENYA(),  // here but empty ,not unconnected
+    .CENYA(CENYA),
+    .WENYA(WENYA),
+    .AYA(AYA),
+    .DYA(DYA),
+    .QA(QA),
+    .QIA(QIA),
+    .PENYA(PENYA),
     // B
-    .CENYB(), // here but empty, not unconnected
-    .WENYB(), // here but empty, not unconnected
-    .AYB(),      // here, unconnected
-    .DYB(),      // here, unconnected
-    .QB(QB),        // good :)
-    .QIB(),      // unconnected
-    .PENYB(),  // here but empty, not unconnected
-
+    .CENYB(CENYB),
+    .WENYB(WENYB),
+    .AYB(AYB),
+    .DYB(DYB),
+    .QB(QB),
+    .QIB(QIB),
+    .PENYB(PENYB),
     // inputs:
     // A
-    .CLKA(sram_clk), // good
-    .CENA(CENA),    // good
-    .WENA(WENA),    // good 
-    .AA(wr_reg_next.addr),    // good
-    .DA(wr_reg_next.data),    // good
-    .EMAA(EMAA), // good
-    .TENA(TENA), // good
-    .BENA(BENA), // good
-    .TCENA(TCENA), // good
-    .TWENA(TWENA), // good
-    .TAA(TAA),  // good
-    .TDA(TDA), // good
-    .TQA(TQA), // good
-    .PENA(PENA), // good
-    .TPENA(TPENA), // good
+    .CLKA(clk),
+    .CENA(1'b0),
+    .WENA(1'b0),
+    .AA(wr_reg_next.addr),    // need in types
+    .DA(wr_reg_next.data),    // need in types
+    .EMAA(3'b000),
+    .TENA(1'b1),
+    .BENA(1'b1),
+    .TCENA(1'b0),
+    .TWENA(1'b0),
+    .TAA(TAA),  
+    .TDA(TDA),
+    .TQA(TQA),
+    .PENA(1'b0),
+    .TPENA(1'b0),
     // B
-    .CLKB(sram_clk), // good
-    .CENB(CENB), // good
-    .WENB(WENB), // good
-    .AB(rd_reg_next.addr),    // good
-    .DB(rd_reg_next.data),    // good
-    .EMAB(EMAB),    // good
-    .TENB(TENB),    // good
-    .BENB(BENB),    // good
-    .TCENB(TCENB),  // good
-    .TWENB(TWENB), // good
-    .TAB(TAB), // good
-    .TDB(TDB), // good
-    .TQB(TQB), // good
-    .PENB(PENB), // good
-    .TPENB(TPENB), // good
+    .CLKB(clk),
+    .CENB(1'b0),
+    .WENB(1'b1),
+    .AB(rd_reg_next.addr),    // need in types
+    .DB(rd_reg_next.data),    // '0
+    .EMAB(3'b000),
+    .TENB(1'b1),
+    .BENB(1'b1),
+    .TCENB(1'b0),
+    .TWENB(1'b0),
+    .TAB(TAB),
+    .TDB(TDB),
+    .TQB(TQB),
+    .PENB(1'b0),
+    .TPENB(1'b0),
 
-    .RETN(~sram_rst)
+    .RETN(~rst)
 );
 
 endmodule
-

@@ -15,7 +15,7 @@ module aes_ctr_drbg #(
   parameter int KEY_BITS        = 128,
   parameter int BLOCK_BITS      = 128,
   parameter int SEED_BITS       = 256,  // seedlen for AES-128
-  parameter int RESEED_INTERVAL = 511   // simple reseed guard (count of generate calls)
+  parameter int RESEED_INTERVAL = 4   // simple reseed guard (count of generate calls)
 )(
   input  logic                      clk,
   input  logic                      rst_n,
@@ -82,8 +82,8 @@ logic [BLOCK_BITS-1:0] aes_out_block;
 logic                  done_set, rnd_set;
 
 // Reseed guard
-logic                  at_reseed_limit;
-assign at_reseed_limit = (reseed_counter_reg >= RESEED_INTERVAL);
+// logic                  at_reseed_limit;
+// assign at_reseed_limit = (reseed_counter_reg >= RESEED_INT);
 
 // Submodule: AES-128 ECB encrypt block
 aes_core u_aes_core (
@@ -165,7 +165,9 @@ always_comb begin
                 op_gen_n        = 1'b0;
                 state_n         = S_WAIT_SEED;
             end else if (generate_i) begin
-                if (!at_reseed_limit && num_blocks_i != 16'd0) begin
+                if (num_blocks_i != 16'd0) begin
+                // if (!at_reseed_limit && num_blocks_i != 16'd0) begin
+
                     blocks_left_n = num_blocks_i;
                     op_gen_n      = 1'b1;
                     state_n       = S_GEN_REQ;

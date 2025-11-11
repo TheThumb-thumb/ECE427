@@ -11,6 +11,10 @@ module ctr_drbg_wrapper #(
   input  logic                 drbg_valid_i, // <- conditioner.drbg_valid_o
   input  logic [SEED_BITS-1:0] seed_i,       // <- conditioner.seed_o
 
+  // debug serial seed load
+    input  logic                 drbg_debug_mode_i,       // 1 = use debug loader
+    input  logic                 drbg_serial_i,
+
   // Streaming output to buffer/consumer ready/valid
   output logic                 out_valid_o,
   input  logic                 out_ready_i,
@@ -122,6 +126,40 @@ typedef enum logic [3:0] {
 
 wstate_t state, state_n;
 
+// Simple debug shift register for 256-bit seed
+logic [SEED_BITS-1:0] dbg_shift_reg;
+logic [$clog2(SEED_BITS+1)-1:0 ] dbg_bit_cnt;
+logic dbg_seed_ready;
+
+always_ff @(posedge clk) begin
+  if (!rst_n) begin
+    dbg_shift_reg  <= '0;
+    dbg_bit_cnt    <= '0;
+    dbg_seed_ready <= 1'b0;
+  end else begin
+    // default: clear "ready" unless we just finished loading
+    dbg_seed_ready <= 1'b0;
+
+    if (drbg_debug_mode_i) begin
+      // Shift in LSB from serial line; choose MSB/LSB convention as you like
+      dbg_shift_reg <= {dbg_shift_reg[SEED_BITS-2:0], drbg_serial_i};
+
+      if (signed'(dbg_bit_cnt) == signed'(SEED_BITS-1)) begin
+        dbg_bit_cnt    <= '0;
+        dbg_seed_ready <= 1'b1;  // we now have a full 256-bit seed
+      end else begin
+        dbg_bit_cnt <= dbg_bit_cnt + 1'b1;
+      end
+    end else begin
+      // Not in debug mode: reset counter and keep "not ready"
+      dbg_bit_cnt    <= '0;
+      dbg_seed_ready <= 1'b0;
+    end
+  end
+end
+
+
+
 // Defaults
 always_comb begin
     // DRBG pulses default low
@@ -143,6 +181,16 @@ always_comb begin
     // Counter default
     blocks_since_reseed_n = blocks_since_reseed;
 
+    // mux seed in wrapper:
+    // // Normal vs debug routing
+    // valid_int = dbg_mode_i ? dbg_seed_valid_i : drbg_valid_i;
+    // seed_int  = dbg_mode_i ? dbg_seed_i       : seed_i;
+
+    // // In debug mode, do NOT request seeds from conditioner
+    // drbg_ready_o = dbg_mode_i ? 1'b0 : ready_int;
+
+
+    // state machine
     state_n = state;
 
     unique case (state)
@@ -152,16 +200,26 @@ always_comb begin
         end
 
         W_SEED_REQ: begin
-            drbg_ready_o = 1'b1;     // tell conditioner we're ready for a seed
-            state_n      = W_SEED_WAIT;
+        if (!drbg_debug_mode_i) begin
+            drbg_ready_o = 1'b1;       // only handshake with conditioner in normal mode
+        end
+        state_n = W_SEED_WAIT;
         end
 
         W_SEED_WAIT: begin
-            drbg_ready_o = 1'b1;
-            if (drbg_valid_i) begin             // move immediately on current valid
-                seed_stretch_ld_inst = 1'b1;      // your existing stretch flag
-                state_n = W_INST_PULSE;
-            end
+          if (!drbg_debug_mode_i) begin
+              drbg_ready_o = 1'b1;
+              if (drbg_valid_i) begin
+              seed_stretch_ld_inst = 1'b1;
+              state_n              = W_INST_PULSE;
+              end
+          end else begin
+              // DEBUG MODE: no handshake; wait for 256 bits to load
+              if (dbg_seed_ready) begin
+              seed_stretch_ld_inst = 1'b1;
+              state_n              = W_INST_PULSE;
+              end
+          end
         end
 
         W_INST_PULSE: begin
@@ -187,13 +245,13 @@ always_comb begin
 
         W_RUN: begin
             // If downstream can accept (either empty or will consume next),
-            // (this is ignoring seed stretching from debug wrapper )and the core is idle (done_o just completed the last block), set another 1 block generate.
             if (!out_valid_o || (out_valid_o && out_ready_i)) begin
-                if (blocks_since_reseed >= RESEED_INTERVAL) begin
-                    state_n = W_RESEED_REQ; // have to add signal padding when looking at the serial input from debug 
-                end else if (!drbg_busy) begin
-                    generate_pulse = 1'b1;
-                end
+              if (blocks_since_reseed >= RESEED_INTERVAL) begin
+                  state_n = W_RESEED_REQ;   // go to reseed path, not fresh instantiate
+                  // do NOT reset blocks_since_reseed here; wait until reseed completes
+              end else if (!drbg_busy) begin
+                  generate_pulse = 1'b1;
+              end
             end
             // blocks_since_reseed go incr a block is actually produced
             if (drbg_rand_v) begin
@@ -201,34 +259,38 @@ always_comb begin
             end
         end
 
-
-
-
         W_RESEED_REQ: begin
-            drbg_ready_o = 1'b1;
-            if (drbg_valid_i) begin
+            if (!drbg_debug_mode_i) begin
+                drbg_ready_o = 1'b1;
+                if (drbg_valid_i) begin
                 seed_stretch_ld_reseed = 1'b1;
-                state_n = W_RESEED_PULSE;
+                state_n                = W_RESEED_PULSE;
+                end
+            end else begin
+                // DEBUG MODE: re-use debug stream to load a new seed
+                if (dbg_seed_ready) begin
+                seed_stretch_ld_reseed = 1'b1;
+                state_n                = W_RESEED_PULSE;
+                end
             end
         end
 
 
         W_RESEED_PULSE: begin
-            // seed_material = seed_latched;
-            seed_valid_pulse = 1'b1;
+          seed_valid_pulse = 1'b1;
+          if (!reseed_fired)
+            reseed_pulse = 1'b1;
 
-            if (!reseed_fired) reseed_pulse = 1'b1;               // one cycle is fine; seed_valid stretches
-            
-            if (seed_stretch == 0) begin
-                blocks_since_reseed_n = '0;
-                state_n = W_WAIT_RESEED;             // wait for core to complete update
-            end
+          if (seed_stretch == 0) begin
+            blocks_since_reseed_n = '0;
+            state_n = W_WAIT_RESEED;
+          end
         end
 
+
         W_WAIT_RESEED: begin
-            if (drbg_done) begin
-                state_n = W_RUN;
-            end
+          if (drbg_done)
+            state_n = W_RUN;
         end
 
 
@@ -238,69 +300,18 @@ end
 logic drbg_valid_q;  // 1-cycle delayed copy of drbg_valid_i
 
 
-// // Registered seed_material (single driver) and delayed valid
-// always_ff @(posedge clk) begin
-//     if (!rst_n) begin
-//         seed_material <= '0;
-//         drbg_valid_q  <= 1'b0;
-//     end else begin
-//         drbg_valid_q  <= drbg_valid_i;                 // delay valid by 1
-
-//         // hold seed on the bus during INST/RESEED; clear after done
-//         if (state == W_INST_PULSE || state == W_RESEED_PULSE)
-//             seed_material <= seed_latched;
-//         else if (drbg_done)
-//             seed_material <= '0;
-//     end
-// end
-
-// // Seq: latch seed & state/counters
-// always_ff @(posedge clk) begin
-//     if (!rst_n) begin
-//         state               <= W_IDLE;
-//         seed_latched        <= '0;
-//         blocks_since_reseed <= '0;
-//         seed_stretch        <= '0;
-//         inst_fired          <= 1'b0;
-//         reseed_fired        <= 1'b0;
-//     end else begin
-//         state               <= state_n;
-//         blocks_since_reseed <= blocks_since_reseed_n;
-
-//         // FIX: latch seed on the *delayed* valid in the wait states
-//         if ( (state == W_SEED_WAIT   && drbg_valid_q) ||
-//              (state == W_RESEED_REQ  && drbg_valid_q) ) begin
-//             seed_latched <= seed_i;
-//         end
-
-//         // Stretch counter: load -> count down while in pulse states
-//         if (seed_stretch_ld_inst)
-//             seed_stretch <= 2;
-//         else if (seed_stretch_ld_reseed)
-//             seed_stretch <= 2;
-//         else if ((state == W_INST_PULSE || state == W_RESEED_PULSE) && seed_stretch != 0)
-//             seed_stretch <= seed_stretch - 2'd1;
-
-//         // One-cycle pulse guards
-//         if (state == W_INST_PULSE && !inst_fired)  inst_fired  <= 1'b1;
-//         else if (state != W_INST_PULSE)            inst_fired  <= 1'b0;
-
-//         if (state == W_RESEED_PULSE && !reseed_fired) reseed_fired <= 1'b1;
-//         else if (state != W_RESEED_PULSE)             reseed_fired <= 1'b0;
-//     end
-// end
-
-
 always_ff @(posedge clk) begin
   if (!rst_n) begin
     seed_material <= '0;
   end else begin
     if (state == W_INST_PULSE || state == W_RESEED_PULSE)
-      seed_material <= seed_latched; // present captured seed during seed_valid window
+      seed_material <= seed_latched;
     else if (drbg_done)
-      seed_material <= '0;           // drop after core completes
+      seed_material <= '0;
   end
 end
+
+
 
 always_ff @(posedge clk) begin
   if (!rst_n) begin
@@ -315,9 +326,14 @@ always_ff @(posedge clk) begin
     blocks_since_reseed <= blocks_since_reseed_n;
 
     // >>> Latch on raw VALID (no state gating) <<<
-    if (drbg_valid_i)
-      seed_latched <= seed_i;
-
+    // if (valid_int)
+    if (!drbg_debug_mode_i)begin
+        if (drbg_valid_i)
+            seed_latched <= seed_i;
+    end else begin
+        if (dbg_seed_ready)
+            seed_latched <= dbg_shift_reg;
+    end
     // Stretch counter
     if (seed_stretch_ld_inst)
       seed_stretch <= 2;

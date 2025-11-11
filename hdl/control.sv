@@ -21,7 +21,7 @@ module control (
     input logic latch_entropy_mux_out, // Direct connection to latch entropy output. Index of entropy source detemined by cell select bits
     input logic jitter_entropy_mux_out, // Direct connection to jitter entropy output. Index of entropy source detemined by cell select bits
 
-    output logic [15:0] entropy_calibration, //Upper 8 are CAL_N, lower 8 are CAL_P
+    output logic [11:0] entropy_calibration, //Upper 8 are CAL_N, lower 8 are CAL_P
 
     // OHT CONNECTIONS
     output logic latch_oht_mux_in, // Latch OHT Mux input

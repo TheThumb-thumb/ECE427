@@ -7,6 +7,8 @@ export TOP_DIR = $(PWD)
 TOP_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/top_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top.sv
 TOP_TB_IO_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/top_io_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top_io.sv
 
+# POST_PNR_TB_SRCS := $(PWD)/hvl/post_pnr_tb.sv $(PWD)/hvl/example_sram.v $(PWD)/hdl/top_io.pnr.v $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v $(PWD)/hvl/capacitors.sv
+
 TOP_TB_SRCS_DEBUG   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/top_debug_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top.sv
 
 TOP_TB_SRCS_CONDITIONER   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/conditioner_debug_tb.sv      $(PWD)/hvl/example_sram.v $(PWD)/hdl/top.sv
@@ -21,11 +23,14 @@ DRBG_WRAP_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/drbg_wrap
 OHT_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/oht_tb.sv $(PWD)/hdl/Online_Health_Test.sv
 OHT_TOP_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/oht_top_tb.sv
 OHTJ_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/ohtj_tb.sv $(PWD)/hdl/ohtJ.sv
-SRAM_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/sram_tb.sv $(PWD)/sram_rf/oht_dp_sram/verilog/oht_dp_sram.v
+SRAM_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/sram_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v
 TRIVIUM_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/trivium_tb.sv $(PWD)/hdl/trivium.sv $(PWD)/hdl/trivium_top.sv
 QUE_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/que_tb.sv $(PWD)/hdl/fifo.sv
-SYNTH_TB_SRCS 	:= $(PWD)/hvl/top_tb_post.sv $(PWD)/hvl/example_sram.v $(PWD)/../syn/synout/top.gate.v $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v
-PNR_TB_SRCS   	:= $(PWD)/hvl/top_tb_post.sv $(PWD)/hvl/example_sram.v $(PWD)/../pnr/pnrout/top.pnr.v  $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v $(PWD)/hvl/capacitors.sv
+
+
+SYNTH_TB_SRCS 	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_synth_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/hvl/top_io.gate.v $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v
+
+PNR_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_pnr_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/hdl/top_io.pnr.v  $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v $(PWD)/hvl/capacitors.sv
 
 #Michael
 CONTROL_TB_SRCS := $(PWD)/hvl/control_tb.sv $(PWD)/hdl/spi.sv $(PWD)/hdl/control.sv
@@ -55,6 +60,9 @@ top_io: $(TOP_TB_IO_SRCS)
 	mkdir -p vcs
 	cd vcs && vcs $(TOP_TB_IO_SRCS) $(VCS_FLAGS) -f $(TOP_IO_FILELIST) -l top_io_compile.log -o top_io_tb
 	cd vcs && ./top_io_tb -l top_io_simulation.log
+
+
+
 
 # ====================  THIS IS MICHAEL'S TEST FOR DEBUG FROM TOP ===================================
 
@@ -186,15 +194,21 @@ sram:
 	cd vcs && vcs $(SRAM_TB_SRCS) $(VCS_FLAGS) -o sram_tb
 	cd vcs && ./sram_tb -l top_simulation.log
 
-vcs/synth_tb: $(SYNTH_TB_SRCS)
-	mkdir -p vcs
-	cd vcs && vcs $(SYNTH_TB_SRCS) $(VCS_FLAGS_POST) +notimingcheck -l synth_compile.log -o synth_tb
-	cd vcs && ./synth_tb -l synth_simulation.log
 
-vcs/pnr_tb: $(PNR_TB_SRCS)
+.PHONY: post_pnr
+post_pnr: $(PNR_TB_SRCS)
 	mkdir -p vcs
-	cd vcs && vcs $(PNR_TB_SRCS) $(VCS_FLAGS_POST) +notimingcheck -l synth_compile.log -o pnr_tb
-	cd vcs && ./pnr_tb -l pnr_simulation.log
+	cd vcs && vcs $(PNR_TB_SRCS) $(VCS_FLAGS_POST) -l post_pnr_compile.log -o post_pnr_tb
+	cd vcs && ./post_pnr_tb -l pnr_simulation.log
+
+
+
+.PHONY: post_synth
+post_synth: $(SYNTH_TB_SRCS)
+	mkdir -p vcs
+	cd vcs && vcs $(SYNTH_TB_SRCS) $(VCS_FLAGS_POST) +notimingcheck -l synth_compile.log -o post_synth_tb
+	cd vcs && ./post_synth_tb -l synth_simulation.log
+
 
 .PHONY: verdi
 verdi:
@@ -205,6 +219,18 @@ verdi:
 top_io_verdi:
 	mkdir -p verdi
 	cd verdi && $(VERDI_HOME)/bin/verdi -ssf $(PWD)/vcs/top_io_dump.fsdb
+
+.PHONY: post_pnr_verdi
+post_pnr_verdi:
+	mkdir -p verdi
+	cd verdi && $(VERDI_HOME)/bin/verdi -ssf $(PWD)/vcs/post_pnr_dump.fsdb
+
+
+.PHONY: post_synth_verdi
+post_synth_verdi:
+	mkdir -p verdi
+	cd verdi && $(VERDI_HOME)/bin/verdi -ssf $(PWD)/vcs/post_synth_dump.fsdb
+
 
 .PHONY: aes_verdi
 aes_verdi:

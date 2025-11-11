@@ -11,6 +11,8 @@ $TOP_DIR/hdl/conditioner.sv
 $TOP_DIR/hdl/aes_ctr_drbg.sv
 $TOP_DIR/hdl/drbg_wrapper.sv
 
+$TOP_DIR/hdl/rng_temp_ctrl.v
+
 $TOP_DIR/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v
 $TOP_DIR/hdl/Online_Health_Test.sv
 $TOP_DIR/hdl/ohtJ.sv
@@ -26,5 +28,10 @@ $TOP_DIR/hdl/entropy_oht_mux.sv
 $TOP_DIR/hdl/trivium.sv
 $TOP_DIR/hdl/trivium_top.sv
 
-
 $TOP_DIR/hdl/output_buffer.sv
+
+$TOP_DIR/hdl/iopad_stub.sv
+$TOP_DIR/hdl/io.sv
+$TOP_DIR/hdl/top.sv
+
+

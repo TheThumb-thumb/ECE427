@@ -3,6 +3,7 @@ import params::*;
 module oht_top_tb;
 
 logic clk, rst;
+int timeout;
 
 initial clk = 1'b0;
 always #1ns clk = ~clk;
@@ -129,47 +130,105 @@ initial rst = 1'b0;
     assign debug_mode = '0;
     assign spi_reg_lsb = '0;
 
-    logic [9:0] count, latch_count;
+    logic [9:0] count, latch_count, vec_cnt;
     logic [31:0][1023:0] temp0, temp1;
-    logic [1023:0] temp2;
+    logic [9:0] temp2, tweak;
+    logic rst_test;
+    logic [latch_sources-1:0] good_entropy_out;
+    // operational tb now need to sweep all bias and then make sure good_entropy_flag outputs
+    // have another teammate check my logic and sanity ;-;
+    // check sram reads and write never occur at the same time, I think that means that initial address is always 32 ahead for write port and 32 behind for read port
+    // ensure shifter actually works correctly
+    // ensure fiao works properly for output
+
 
     always_ff @(posedge clk) begin
-        // for (int i = 0; i < es_sources; i++) begin
-        //     ES_in[i] <= $urandom_range(0,1);
+
+        if (good_entropy_out == '1) begin
+            count <= '0;
+            vec_cnt <= vec_cnt + 1'b1;
+            rst_test <= 1'b1;
+            latch_count <= '0;
+        end
+        // else if (vec_cnt == 101) begin
+        //     $display("[%0t] All %0d test vectors processed. Finishing simulation.", $time, vec_cnt);
+        //     $finish();
         // end
-        if (rst) begin
+        else if (rst || rst_test) begin
             for (int i = 0; i < es_sources; i++) begin
-                ES_in[i] <= test_vec[100][0];  // this is your biased input and then adjust to calibration after
+                ES_in[i] <= test_vec[vec_cnt][count];  // this is your biased input and then adjust to calibration after
                 temp0[i] <= '0;
                 temp1[i] <= '0;
             end
             temp2 <= '0;
             count <= '0;
             latch_count <= '0;
-            
-        end else if (count == 1023) begin
+            tweak <= '0;
+            if (rst) begin
+                vec_cnt <= 10'd1;  
+            end
+            rst_test <= '0;
+        end else if (count == 31) begin
             for(int i = 0; i < latch_sources; i++) begin
-                // temp0[i] <= test_vec[arr_n[i]* 1.5625];
-                // temp1[i] <= test_vec[arr_p[i]* 1.5625];
-                int idx_n, idx_p;
+                int idx_n, idx_p, vec_int;
                 idx_n = int'(arr_n[i] * 1.5625);
                 idx_p = int'(arr_p[i] * 1.5625);
-                // temp0[i] <= test_vec[100 - idx_n];
-                // temp1[i] <= test_vec[idx_p];
-                // temp2 <= temp1 + temp0;
-                temp2 <= (idx_p - idx_n < 0) ? '0 : (idx_p - idx_n) / 2;
-                ES_in[i] <= test_vec[temp2][latch_count];
+                vec_int = int'(vec_cnt);
+                if (idx_p - idx_n < 0) begin                        // if the calibration of the p array is smaller than n array we want more 0s
+                    if (vec_int - idx_n < 0) begin                  // we get more 0s as tweak gets closer to 0, so temp2 goes closer to 0
+                        temp2 <= (100 - idx_n) / 2;                
+                    end else begin
+                        temp2 <= (vec_int - idx_n);                 
+                    end
+                    tweak <= temp2;
+                end else begin
+                    temp2 <= (idx_p - idx_n) / 2;
+                    tweak <= vec_cnt + temp2;
+                end
+                ES_in[i] <= test_vec[tweak][latch_count];
             end
             latch_count <= latch_count+1;
+            rst_test <= 1'b0;
 
         end else begin
             count <= count + 1;
+            rst_test <= 1'b0;
         end
     end
 
-    oht_top dut (
+    logic [latch_sources-1:0] good_seen;
+
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst) begin
+            good_seen <= '0;
+        end else begin
+            // once seen, stay seen until next reset
+            good_seen <= good_seen | good_entropy_out;
+        end
+    end
+
+    // --- assert for each latch source that arr_n/arr_p never hit 62/63 before good_seen
+    genvar gi;
+    generate
+        for (gi = 0; gi < latch_sources; gi++) begin : gen_check_good_before_arr
+            // property: on clock, if arr_n or arr_p equals 62 or 63, good_seen must already be true
+            property p_good_before_arr;
+                @(posedge clk)
+                disable iff (rst)
+                ( (arr_n[gi] == 6'd62) || (arr_n[gi] == 6'd63)
+                || (arr_p[gi] == 6'd62) || (arr_p[gi] == 6'd63) )
+                |-> good_seen[gi];
+            endproperty
+
+            // bind the property to an assertion
+            assert property (p_good_before_arr)
+                else $fatal("Source %0d: arr_n/arr_p reached 62/63 before good_entropy_out was seen", gi);
+        end
+    endgenerate
+
+    oht_top_test dut (
         .clk(clk),
-        .rst(rst),
+        .rst(rst || rst_test),
 
         .ES_in(ES_in),
         .deque(deque),
@@ -182,7 +241,8 @@ initial rst = 1'b0;
         .arr_n(arr_n),
         .arr_p(arr_p),
         .j_disable_arr(j_disable_arr),
-        .rd_good_arr(rd_good_arr)
+        .rd_good_arr(rd_good_arr),
+        .good_entropy_out(good_entropy_out)
 
     );
 
@@ -190,27 +250,11 @@ initial rst = 1'b0;
 		$fsdbDumpfile("oht_top_dump.fsdb");
 		$fsdbDumpvars(0, "+all");
 		rst = 1'b1;
-        // if (rst) begin
-        //     for (int i = 0; i < es_sources; i++) begin
-        //         ES_in[i] = test_vec[100][0];  // this is your biased input and then adjust to calibration after
-        //     end
-        //     count = '0;
-        //     latch_count = '0;
-        // end
-
         #10ns
 		rst = 1'b0;
-        // forever begin
-        //     #1ns;
-        //         for(int i = 0; i < latch_sources; i++) begin
-        //             ES_in[i] <= test_vec[arr_n[i]][latch_count];
-        //         end
-        //         latch_count <= latch_count+1;
-        //         if (latch_count == 1023) break;
-        //     #1ns;
-        // end
-		#100000ns
-		$finish();
+        #2500000000;
+        $finish();
+
 	end
 
 endmodule

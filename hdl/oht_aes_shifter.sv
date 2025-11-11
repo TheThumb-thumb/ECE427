@@ -8,8 +8,7 @@ module streaming_bit_compactor #(
     input  logic [WIDTH-1:0]     mask_in,
     input  logic                 valid_in,       // asserts when new data_in/mask_in are valid
     output logic [WIDTH-1:0]     data_out,       // full word of compacted bits
-    output logic                 valid_out,      // one-cycle pulse when data_out is valid
-    output logic [$clog2(WIDTH+1)-1:0] num_good_bits_debug
+    output logic                 valid_out      // one-cycle pulse when data_out is valid
 );
 
     // Internal state
@@ -72,7 +71,5 @@ module streaming_bit_compactor #(
             end
         end
     end
-
-    assign num_good_bits_debug = num_good_bits;
 
 endmodule

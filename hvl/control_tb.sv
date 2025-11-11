@@ -380,7 +380,7 @@ module control_tb;
             input_pin_1 = conditioner_serial_input[i]; // MSB first
             #10;
         end
-
+        
         #30
         $finish;
     end
