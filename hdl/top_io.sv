@@ -130,6 +130,7 @@ end
 
 ro_temp_control_v1 temp0 (
     .EN_IN(~temp_debug_io),               // to turn on or turn off temp sensor
+    .rst_n(rst_n),
     .CLK(clk),                 // normal clock of system
     .TEMP_IN(temp_counter_0),             // one comes from ring oscillator
     .TEMP_CMP(temp_threshold_array_0),            // one comes from spi
@@ -140,6 +141,7 @@ ro_temp_control_v1 temp0 (
 
 ro_temp_control_v1 temp1 (
     .EN_IN(~temp_debug_io),               // to turn on or turn off temp sensor
+    .rst_n(rst_n),
     .CLK(clk),                 // normal clock of system
     .TEMP_IN(temp_counter_1),             // one comes from ring oscillator
     .TEMP_CMP(temp_threshold_array_1),            // one comes from spi
@@ -150,6 +152,7 @@ ro_temp_control_v1 temp1 (
 
 ro_temp_control_v1 temp2 (
     .EN_IN(~temp_debug_io),               // to turn on or turn off temp sensor
+    .rst_n(rst_n),
     .CLK(clk),                 // normal clock of system
     .TEMP_IN(temp_counter_2),             // one comes from ring oscillator
     .TEMP_CMP(temp_threshold_array_2),            // one comes from spi
@@ -160,6 +163,7 @@ ro_temp_control_v1 temp2 (
 
 ro_temp_control_v1 temp3 (
     .EN_IN(~temp_debug_io),               // to turn on or turn off temp sensor
+    .rst_n(rst_n),
     .CLK(clk),                 // normal clock of system
     .TEMP_IN(temp_counter_3),             // one comes from ring oscillator
     .TEMP_CMP(temp_threshold_array_3),            // one comes from spi

@@ -6,7 +6,7 @@ import params::*;
     input logic adc_in, // data value from entropy source
     input logic clk,
     input logic rst,
-    input logic debug_mode,
+    // input logic debug_mode,
 
     output logic perm_fail,
     output logic valid,

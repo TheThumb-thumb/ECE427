@@ -40,7 +40,7 @@ SPI_TB_SRCS := $(PWD)/hvl/spi_tb.sv $(PWD)/hdl/spi.sv
 
 export VCS_ARCH_OVERRIDE=linux
 VCS_FLAGS      = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -fsdb -suppress=LCA_FEATURES_ENABLED -j4 +notimingcheck -assert svaext +define+RISCV_FORMAL +define+TOP_DIR=$TOP_DIR 
-VCS_FLAGS_POST = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -fsdb -suppress=LCA_FEATURES_ENABLED +neg_tchk -negdelay +compsdf +mindelays +sdfverbose -j4 -fgp
+VCS_FLAGS_POST = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -fsdb -suppress=LCA_FEATURES_ENABLED -j4 +notimingcheck +neg_tchk -negdelay +compsdf +mindelays +sdfverbose -fgp
 
 #Filelists
 TOP_IO_FILELIST := $(PWD)/filelists/top_io_filelist.f
@@ -206,7 +206,7 @@ post_pnr: $(PNR_TB_SRCS)
 .PHONY: post_synth
 post_synth: $(SYNTH_TB_SRCS)
 	mkdir -p vcs
-	cd vcs && vcs $(SYNTH_TB_SRCS) $(VCS_FLAGS_POST) +notimingcheck -l synth_compile.log -o post_synth_tb
+	cd vcs && vcs $(SYNTH_TB_SRCS) $(VCS_FLAGS_POST) -l synth_compile.log -o post_synth_tb
 	cd vcs && ./post_synth_tb -l synth_simulation.log
 
 

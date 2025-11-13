@@ -197,7 +197,7 @@ generate
             .adc_in(ES_in[32+i]),
             .clk(clk),
             .rst(rst),
-            .debug_mode(debug_mode),
+            // .debug_mode(debug_mode),
 
             .perm_fail(fail_arr[32+i]),
             .valid(valid_arr[32+i]),

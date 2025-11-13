@@ -18,7 +18,12 @@ import params::*;
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
     output logic [jitter_sources-1:0] j_disable_arr,
     output logic [es_sources-1:0] rd_good_arr,
-    output logic [latch_sources-1:0] good_entropy_out
+    output logic [latch_sources-1:0] good_entropy_out,
+
+    output logic [31:0] sram_read_addr,
+    output logic sram_read_valid,
+    output logic [31:0] sram_write_addr,
+    output logic sram_write_valid
 
 );
 
@@ -199,7 +204,7 @@ generate
             .adc_in(ES_in[32+i]),
             .clk(clk),
             .rst(rst),
-            .debug_mode(debug_mode),
+            // .debug_mode(debug_mode),
 
             .perm_fail(fail_arr[32+i]),
             .valid(valid_arr[32+i]),
@@ -216,8 +221,8 @@ streaming_bit_compactor shifter (
     .mask_in(mask_in),
     .valid_in(rd_reg_out.flag),
     .data_out(buff_in),
-    .valid_out(shifter_rdy),
-    .num_good_bits_debug(num_good_bits_debug)
+    .valid_out(shifter_rdy)
+    // .num_good_bits_debug(num_good_bits_debug)
 );
 
 que_fiao sram_aes_buff (
@@ -236,6 +241,12 @@ que_fiao sram_aes_buff (
 
 // PORTA Write ONLY
 // PORTB Read ONLY
+
+// sram debug ports:
+assign sram_write_addr = wr_reg_next.addr;
+assign sram_write_valid = wr_reg_next.flag;
+assign sram_read_addr = rd_reg_next.addr;
+assign sram_read_valid = rd_reg_next.flag;
 
 oht_dp_sram_not_tcc_correct rng_storage(
     // outputs:

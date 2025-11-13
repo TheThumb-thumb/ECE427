@@ -51,7 +51,7 @@ module streaming_bit_compactor #(
                 logic [$clog2(BUFFER_WIDTH+1)-1:0] next_count;
 
                 // Append new bits (concatenate compacted at current buffer_count position)
-                next_buffer = buffer | (compacted << buffer_count);
+                next_buffer = buffer[WIDTH-1:0] | (compacted << buffer_count);
                 next_count  = buffer_count + num_good_bits;
 
                 // Check if we have a full output word

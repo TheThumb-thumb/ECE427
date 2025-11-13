@@ -949,10 +949,63 @@ module top_debug_tb;
         $display("\n --- Test: Set Input 1 to Conditioner ---");
         reset_dut();
         $display("\n --- Reset Chip ---");
+        tb_rand_req=1'b1;
 
         // Set up the command and the serial data
         test_word = 22'b0_00_00000_00_00001_11_00000; // input to conditioner, output 1 clk, output 2 VDD
         conditioner_serial_input = 384'h7b3a9f0e5c6d2814b7f8c9d0a3e5b6f7a8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c2e3f4a5b6c7d8e9f;
+        tb_debug = 1'b1;
+        // Send the SPI command
+        spi_write_only(test_word); // Set the mux
+        tb_rand_req_type = RDSEED_64; // SEED JUST USES CONDITIONER
+
+        // Check results
+        if (tb_spi_data_ready) begin
+            // Wait for the command to propagate internally
+            @(posedge tb_ic_clk);
+            @(posedge tb_ic_clk);
+            @(posedge tb_ic_clk);
+
+            // NOTE: Check your internal signal path. 
+            // 'curr_state' is probably not a TB signal.
+            $display("Curr state: %h", dut.u_control.curr_state); 
+            
+            // This check seems to compare an internal state with the command word.
+            // Adjust this if logic is different.
+            if (dut.u_control.curr_state == test_word) begin
+                $display("Curr state Test PASSED ✓!");
+            end else begin
+                $display("Curr state FAILED ✘: Expected %h", test_word);
+            end
+            
+        end else begin
+            $display("Curr state FAILED ✘: data_ready not high");
+        end
+
+        // Now, send the serial data on input_pin_1, driven by the main clock
+        for (int i=0; i<=383; i++) begin
+            tb_input_pin_1 = conditioner_serial_input[i]; // MSB first
+            #10; // This delay should align with your main clock period
+                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+        end
+
+        tb_input_pin_1 = 1'b0; // Set pin low after transmission
+
+        #10000;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+        // // ---------------- Set input 1 to DRBG rappin
+        $display("\n --- Test: Set Input 1 to DRBG ---");
+        reset_dut();
+        $display("\n --- Reset Chip ---");
+        tb_rand_req=1'b1;
+
+        // Set up the command and the serial data
+        test_word = 22'b0_00_00000_00_00001_11_00010; // input to conditioner, output 1 clk, output 2 VDD
+        conditioner_serial_input = 256'hf3c8e4b1d72a9c0f54ab19de8837f4c2bb10e9df4372a6cc91ef02d7a54bc810;
         tb_debug = 1'b1;
         // Send the SPI command
         spi_write_only(test_word); // Set the mux

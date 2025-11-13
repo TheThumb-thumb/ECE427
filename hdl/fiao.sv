@@ -33,6 +33,14 @@ module que_fiao #(
 
     // Combinational logic
     always_comb begin
+
+        if (rst) begin
+
+            full = 1'b0;
+            empty = 1'b1;
+
+        end
+
         buffer_next  = buffer_reg;
         counter_next = counter_reg;
         rdata        = '0;
