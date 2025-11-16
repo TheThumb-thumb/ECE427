@@ -1,4 +1,16 @@
 hvl/capacitors.sv
 hvl/example_sram.v
 *.log
+bin/aes_env/
+lvs/
+sram_lvs/
+sram_lvs_correct/
+sram_lvs_correct_v2/
+sram_rf/
+sram_schematic/
+vcs/
+verdi/
+verdiLog/
+*.daidir
+*.o
 
