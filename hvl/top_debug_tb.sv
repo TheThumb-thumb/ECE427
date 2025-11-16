@@ -30,12 +30,13 @@ module top_debug_tb;
     // --- 1. Define Testbench Signals ---
     
     // Signals to drive DUT inputs
-    logic tb_ic_clk;
+    // logic tb_clk;
     logic tb_rst_n;
     logic tb_rand_req;
     rand_req_t tb_rand_req_type;
     logic tb_ss_n;
-    logic tb_debug_clk;
+    // logic tb_clk;
+    logic tb_clk;
     logic tb_mosi;
     logic tb_debug;
     logic tb_output_to_input_direct;
@@ -62,7 +63,7 @@ module top_debug_tb;
     // for clarity and to avoid mistakes.
     top dut (
         // CLK+RST
-        .ic_clk(tb_ic_clk),
+        .clk(tb_clk),
         .rst_n(tb_rst_n),
 
         // CPU I/O
@@ -74,7 +75,6 @@ module top_debug_tb;
         
         // SPI Pins
         .ss_n(tb_ss_n),
-        .debug_clk(tb_debug_clk),
         .mosi(tb_mosi),
         .miso(tb_miso),
         .spi_data_ready(tb_spi_data_ready),
@@ -101,17 +101,9 @@ module top_debug_tb;
 
 
     // Clock generation (SPI clock)
-    logic debug_clk;
-    logic ic_clk;
-    initial begin
-        
-        tb_debug_clk = 0;
-        forever #5 tb_debug_clk = ~tb_debug_clk; // 100 MHz clock
-    end
-
-    initial begin
-        tb_ic_clk = 0;
-        forever #5 tb_ic_clk = ~tb_ic_clk; // 100 MHz clock
+    initial begin       
+        tb_clk = 0;
+        forever #5 tb_clk = ~tb_clk; // 100 MHz clock
     end
 
     initial begin
@@ -145,12 +137,12 @@ module top_debug_tb;
     
     task spi_write_only(input logic [word_width-1:0] data_to_send);
         // Select the slave
-        @(posedge tb_debug_clk);
+        @(posedge tb_clk);
         tb_ss_n = 0;
         #15;
 
         // Send data
-        @(negedge tb_debug_clk);
+        @(negedge tb_clk);
         for (int i=word_width-1; i>=0; i--) begin
             tb_mosi = data_to_send[i]; // MSB first
             #10;
@@ -171,12 +163,12 @@ module top_debug_tb;
         data_received = '0; // Clear old data
 
         // Select the slave
-        @(posedge tb_debug_clk);
+        @(posedge tb_clk);
         tb_ss_n = 0;
         #15;
 
         // Send command
-        @(negedge tb_debug_clk);
+        @(negedge tb_clk);
         for (int i=word_width-1; i>=0; i--) begin
             tb_mosi = data_to_send[i]; // MSB first
             #10;
@@ -230,6 +222,36 @@ module top_debug_tb;
             $display("DEFAULT STATE read test FAILED ✘: data_ready not high");
         end
         #20;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // ------------------- Test reading Debug STATE (Read reg 0x00) ----------------------
+        $display("\n --- Test: Read Debug STATE ---");
+        tb_debug = 1'b1;
+
+        test_word = 22'b0000000110010100000000; // output from jitter 10 output 2 from clk
+        spi_write_only(test_word); // Set the mux
+
+        test_word = 22'b1100010000000000000000 ;
+        
+        // Call the task to perform the transaction
+        spi_write_read(test_word, master_received);
+
+        // Check results
+        if (tb_spi_data_ready) begin
+            $display("Data received by master: %h", master_received);
+            if (master_received == 22'b0000000110010100000000) begin 
+                $display("DEBUG STATE read test PASSED ✓!");
+            end else begin
+                $display("DEBUG STATE read test FAILED ✘: Expected %h", 22'h000000);
+            end
+        end else begin
+            $display("DEBUG STATE read test FAILED ✘: data_ready not high");
+        end
+        #20;
+        tb_debug = 1'b1;
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -710,8 +732,8 @@ module top_debug_tb;
         // Check results
         if (tb_spi_data_ready) begin
             // Wait for the command to propagate internally
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
+            @(posedge tb_clk);
+            @(posedge tb_clk);
 
             // NOTE: Check your internal signal path. 
             // 'curr_state' is probably not a TB signal.
@@ -733,7 +755,7 @@ module top_debug_tb;
         for (int i=0; i<=383; i++) begin
             tb_entropy_source_array[1] = entropy_sim_serial_input[i]; // MSB first
             #10; // This delay should align with your main clock period
-                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+                // If tb_clk period is 10ns, use `@(posedge tb_clk);` instead of #10
         end
 
         tb_input_pin_1 = 1'b0; // Set pin low after transmission
@@ -757,8 +779,8 @@ module top_debug_tb;
         // Check results
         if (tb_spi_data_ready) begin
             // Wait for the command to propagate internally
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
+            @(posedge tb_clk);
+            @(posedge tb_clk);
 
             // NOTE: Check your internal signal path. 
             // 'curr_state' is probably not a TB signal.
@@ -780,7 +802,7 @@ module top_debug_tb;
         for (int i=0; i<=383; i++) begin
             tb_entropy_source_array[42] = entropy_sim_serial_input[i]; // MSB first
             #10; // This delay should align with your main clock period
-                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+                // If tb_clk period is 10ns, use `@(posedge tb_clk);` instead of #10
         end
 
         tb_input_pin_1 = 1'b0; // Set pin low after transmission
@@ -805,8 +827,8 @@ module top_debug_tb;
         // Check results
         if (tb_spi_data_ready) begin
             // Wait for the command to propagate internally
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
+            @(posedge tb_clk);
+            @(posedge tb_clk);
 
             // NOTE: Check your internal signal path. 
             // 'curr_state' is probably not a TB signal.
@@ -828,7 +850,7 @@ module top_debug_tb;
         for (int i=0; i<=383; i++) begin
             tb_entropy_source_array[42] = conditioner_serial_input[i]; // MSB first
             #10; // This delay should align with your main clock period
-                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+                // If tb_clk period is 10ns, use `@(posedge tb_clk);` instead of #10
         end
 
         #10000;
@@ -855,8 +877,8 @@ module top_debug_tb;
             // Check results
             if (tb_spi_data_ready) begin
                 // Wait for the command to propagate internally
-                @(posedge tb_ic_clk);
-                @(posedge tb_ic_clk);
+                @(posedge tb_clk);
+                @(posedge tb_clk);
 
 
                 // NOTE: Check your internal signal path. 
@@ -879,7 +901,7 @@ module top_debug_tb;
             for (int i=0; i<12; i++) begin
                 tb_entropy_source_array[e_source] = entropy_sim_serial_input_short[i]; // MSB first
                 #10; // This delay should align with your main clock period
-                    // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+                    // If tb_clk period is 10ns, use `@(posedge tb_clk);` instead of #10
             end
 
         tb_input_pin_1 = 1'b0; // Set pin low after transmission
@@ -907,8 +929,8 @@ module top_debug_tb;
             // Check results
             if (tb_spi_data_ready) begin
                 // Wait for the command to propagate internally
-                @(posedge tb_ic_clk);
-                @(posedge tb_ic_clk);
+                @(posedge tb_clk);
+                @(posedge tb_clk);
 
 
                 // NOTE: Check your internal signal path. 
@@ -931,7 +953,7 @@ module top_debug_tb;
             for (int i=0; i<12; i++) begin
                 tb_entropy_source_array[e_source+32] = entropy_sim_serial_input_short[i]; // MSB first
                 #10; // This delay should align with your main clock period
-                    // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+                    // If tb_clk period is 10ns, use `@(posedge tb_clk);` instead of #10
             end
 
         tb_input_pin_1 = 1'b0; // Set pin low after transmission
@@ -962,9 +984,9 @@ module top_debug_tb;
         // Check results
         if (tb_spi_data_ready) begin
             // Wait for the command to propagate internally
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
+            @(posedge tb_clk);
+            @(posedge tb_clk);
+            @(posedge tb_clk);
 
             // NOTE: Check your internal signal path. 
             // 'curr_state' is probably not a TB signal.
@@ -986,7 +1008,7 @@ module top_debug_tb;
         for (int i=0; i<=383; i++) begin
             tb_input_pin_1 = conditioner_serial_input[i]; // MSB first
             #10; // This delay should align with your main clock period
-                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+                // If tb_clk period is 10ns, use `@(posedge tb_clk);` instead of #10
         end
 
         tb_input_pin_1 = 1'b0; // Set pin low after transmission
@@ -1009,14 +1031,14 @@ module top_debug_tb;
         tb_debug = 1'b1;
         // Send the SPI command
         spi_write_only(test_word); // Set the mux
-        tb_rand_req_type = RDSEED_64; // SEED JUST USES CONDITIONER
+        tb_rand_req_type = RDRAND_64; // SEED JUST USES CONDITIONER
 
         // Check results
         if (tb_spi_data_ready) begin
             // Wait for the command to propagate internally
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
-            @(posedge tb_ic_clk);
+            @(posedge tb_clk);
+            @(posedge tb_clk);
+            @(posedge tb_clk);
 
             // NOTE: Check your internal signal path. 
             // 'curr_state' is probably not a TB signal.
@@ -1038,12 +1060,12 @@ module top_debug_tb;
         for (int i=0; i<=383; i++) begin
             tb_input_pin_1 = conditioner_serial_input[i]; // MSB first
             #10; // This delay should align with your main clock period
-                // If tb_ic_clk period is 10ns, use `@(posedge tb_ic_clk);` instead of #10
+                // If tb_clk period is 10ns, use `@(posedge tb_clk);` instead of #10
         end
 
         tb_input_pin_1 = 1'b0; // Set pin low after transmission
 
-        #10000;
+        #1000000;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1064,9 +1086,9 @@ module top_debug_tb;
         // // Check results
         // if (tb_spi_data_ready) begin
         //     // Wait for the command to propagate internally
-        //     @(posedge tb_ic_clk);
-        //     @(posedge tb_ic_clk);
-        //     @(posedge tb_ic_clk);
+        //     @(posedge tb_clk);
+        //     @(posedge tb_clk);
+        //     @(posedge tb_clk);
 
         //     // NOTE: Check your internal signal path. 
         //     // 'curr_state' is probably not a TB signal.

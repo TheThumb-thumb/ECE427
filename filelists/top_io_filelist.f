@@ -33,5 +33,6 @@ $TOP_DIR/hdl/output_buffer.sv
 $TOP_DIR/hdl/iopad_stub.sv
 $TOP_DIR/hdl/io.sv
 $TOP_DIR/hdl/top.sv
+$TOP_DIR/hdl/clkmux.sv
 
 

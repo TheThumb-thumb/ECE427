@@ -1,209 +1,3 @@
-// `timescale 1ns/1ps
-
-// import le_types::*;
-// import params::*;
-
-// module top_io_synth_tb;
-
-//     // clocks
-//     logic ic_clk;
-//     logic rst_n;
-//     logic debug_clk;
-
-//     initial begin
-//         ic_clk = 1'b0;
-//         forever #1ns ic_clk = ~ic_clk;
-//     end
-
-//     initial begin
-//         debug_clk = 1'b0;
-//         forever #5ns debug_clk = ~debug_clk;
-//     end
-
-//     // CPU 
-//     logic        rand_req;
-//     rand_req_t   rand_req_type;
-//     logic [15:0] rand_byte;
-//     logic        rand_valid;
-//     logic        slow_clk;
-
-//     // SPI
-//     logic ss_n, mosi, miso, spi_data_ready;
-
-//     // debug
-//     logic debug, output_to_input_direct, input_pin_1, output_pin_1, output_pin_2;
-
-//     // temp / analog
-//     logic        temp_debug;
-//     logic [3:0]  EN_out1, EN_out2;
-//     logic [13:0] temp_counter_0, temp_counter_1, temp_counter_2, temp_counter_3;
-
-//     // entropy / jitter
-//     logic [63:0]  entropy_source_array;
-//     logic [191:0] arr_n, arr_p;
-//     logic [31:0]  jitter_disable_arr;
-//     logic         analog_clk;
-//     logic         jitter_vdd_A, jitter_vdd_B;
-
-//     // DUT from top_io.gate.v
-//     // top_io dut (
-//     //     .ic_clk_io                 (ic_clk),
-//     //     .rst_n_io                  (rst_n),
-
-//     //     .rand_req_io               (rand_req),
-//     //     .rand_req_type_io          (rand_req_type),
-//     //     .rand_byte_io              (rand_byte),
-//     //     .rand_valid_io             (rand_valid),
-//     //     .slow_clk_io               (slow_clk),
-
-//     //     .ss_n_io                   (ss_n),
-//     //     .debug_clk_io              (debug_clk),
-//     //     .mosi_io                   (mosi),
-//     //     .miso_io                   (miso),
-//     //     .spi_data_ready_io         (spi_data_ready),
-
-//     //     .debug_io                  (debug),
-//     //     .output_to_input_direct_io (output_to_input_direct),
-//     //     .input_pin_1_io            (input_pin_1),
-//     //     .output_pin_2_io           (output_pin_2),
-//     //     .output_pin_1_io           (output_pin_1),
-
-//     //     .temp_debug_io             (temp_debug),
-//     //     .EN_out1                   (EN_out1),
-//     //     .EN_out2                   (EN_out2),
-//     //     .temp_counter_0            (temp_counter_0),
-//     //     .temp_counter_1            (temp_counter_1),
-//     //     .temp_counter_2            (temp_counter_2),
-//     //     .temp_counter_3            (temp_counter_3),
-
-//     //     .entropy_source_array      (entropy_source_array),
-//     //     .arr_n                     (arr_n),
-//     //     .arr_p                     (arr_p),
-//     //     .jitter_disable_arr        (jitter_disable_arr),
-//     //     .analog_clk                (analog_clk),
-
-//     //     .jitter_vdd_A              (),
-//     //     .jitter_vdd_B              ()
-//     // );
-
-// 	top_io dut(
-// 		// CLK+RST
-// 		.ic_clk_io(ic_clk),
-// 		.rst_n_io(top_reset),
-	
-// 		// CPU I/O
-// 		.rand_req_io(rand_req),
-// 		.rand_req_type_io(rand_req_type),
-// 		.rand_byte_io(rand_byte),
-// 		.rand_valid_io(rand_valid),
-// 		.slow_clk_io(slow_clk),
-
-// 		// SPI Pins
-// 		.ss_n_io(ss_n),
-// 		.debug_clk_io(debug_clk),
-// 		.mosi_io(mosi),
-// 		.miso_io(miso),
-// 		.spi_data_ready_io(spi_data_ready),
-
-// 		// Debug
-// 		.debug_io(debug),
-// 		.output_to_input_direct_io(1'b0),
-
-// 		// Serial I/O for debug
-// 		.output_pin_2_io(output_pin_2),
-// 		.output_pin_1_io(output_pin_1),
-// 		.input_pin_1_io(input_pin_1),
-
-// 		// Temperature sensor I/O
-//         .temp_debug_io(io_temp_debug),
-//         .EN_out1(EN_out1),
-//         .EN_out2(EN_out2),
-//         .temp_counter_0(temp_counter_0),
-//         .temp_counter_1(temp_counter_1),
-//         .temp_counter_2(temp_counter_2),
-//         .temp_counter_3(temp_counter_3),
-        
-//         .entropy_source_array(entropy),
-//         .arr_n(arr_n),
-//         .arr_p(),
-//         .jitter_disable_arr(),
-//         .analog_clk(),
-//         .vdd_A(),
-//         .vdd_B(),
-//         .jitter_vdd_A(),
-//         .jitter_vdd_B()
-		
-// 	);
-
-//     // fake entropy
-//     always_ff @(posedge ic_clk) begin
-//         entropy_source_array <= {$urandom(), $urandom()};
-//     end
-
-//     // reset + defaults
-//     task automatic reset_dut();
-//         rst_n                 = 1'b0;
-//         rand_req              = 1'b0;
-//         rand_req_type         = '0;
-//         ss_n                  = 1'b1;
-//         mosi                  = 1'b0;
-//         debug                 = 1'b0;
-//         output_to_input_direct= 1'b0;
-//         input_pin_1           = 1'b0;
-//         temp_debug            = 1'b0;
-//         temp_counter_0        = '0;
-//         temp_counter_1        = '0;
-//         temp_counter_2        = '0;
-//         temp_counter_3        = '0;
-//         jitter_vdd_A          = 1'b1;
-//         jitter_vdd_B          = 1'b1;
-//         // entropy_source_array  = '0;
-
-//         repeat (10) @(posedge ic_clk);
-//         rst_n = 1'b1;
-//         repeat (20) @(posedge ic_clk);
-//     endtask
-
-//     task automatic drive_random_request();
-//         rand_req_type = RDSEED_64;
-//         rand_req      = 1'b1;
-//         @(posedge ic_clk);
-//         rand_req      = 1'b0;
-//         wait (rand_valid === 1'b1);
-//         $display("[%0t] SYNTH RDSEED_64: %h", $realtime, rand_byte);
-//     endtask
-
-//     task automatic normal_behavior_loop();
-//         forever begin
-//             repeat (50) @(posedge ic_clk);
-//             drive_random_request();
-//         end
-//     endtask
-
-//     initial begin
-//         $fsdbDumpfile("top_io_synth.fsdb");
-//         $fsdbDumpvars(0, top_io_synth_tb);
-
-//         reset_dut();
-
-//         fork
-//             normal_behavior_loop();
-//         join_none
-
-//         #20000ns;
-//         $finish;
-//     end
-
-//     // sanity assertion
-//     property p_rand_byte_known;
-//         @(posedge ic_clk) rand_valid |-> !$isunknown(rand_byte);
-//     endproperty
-
-//     a_rand_byte_known: assert property (p_rand_byte_known)
-//         else $fatal(1, "rand_byte X/Z when rand_valid=1 at %0t", $realtime);
-
-// endmodule
-
 `timescale 1ns/1ps
 
 import le_types::*;
@@ -239,9 +33,7 @@ module top_io_tb;
 	};
 
 	// Clock generation
-    logic debug_clk;
     logic ic_clk;
-	logic top_clk;
 
 	//Reset pin
 	logic top_reset;
@@ -257,7 +49,7 @@ module top_io_tb;
 	logic ss_n, mosi, miso;
 
 	//DEBUG IO
-	logic input_pin_1, output_pin_1, output_pin_2, debug;
+	logic input_pin_1, output_pin_1, output_pin_2, debug, output_to_input_direct;
 
 	//TEMP/ENTROP
     logic io_temp_debug;
@@ -290,19 +82,9 @@ module top_io_tb;
 
 	//Drive clocks
 	initial begin
-        debug_clk = 0;
-        forever #5 debug_clk = ~debug_clk; // 100 MHz clock
-    end
-
-	initial begin
         ic_clk = 0;
-        forever #2 ic_clk = ~ic_clk; // 500 MHz clock
+        forever #10 ic_clk = ~ic_clk;
     end
-
-	always_comb begin
-		if(debug) top_clk = debug_clk;
-		else top_clk = ic_clk;
-	end
 
 	top_io dut(
 		// CLK+RST
@@ -318,14 +100,13 @@ module top_io_tb;
 
 		// SPI Pins
 		.ss_n_io(ss_n),
-		.debug_clk_io(debug_clk),
 		.mosi_io(mosi),
 		.miso_io(miso),
 		.spi_data_ready_io(spi_data_ready),
 
 		// Debug
 		.debug_io(debug),
-		.output_to_input_direct_io(1'b0),
+		.output_to_input_direct_io(output_to_input_direct),
 
 		// Serial I/O for debug
 		.output_pin_2_io(output_pin_2),
@@ -345,17 +126,19 @@ module top_io_tb;
         .arr_n(arr_n),
         .arr_p(),
         .jitter_disable_arr(),
-        .analog_clk(),
-        .vdd_A(),
-        .vdd_B(),
-        .jitter_vdd_A(),
-        .jitter_vdd_B()
+        .analog_clk()
 		
 	);
 
+	logic [63:0] permanent_entropy_mask;
+    initial begin
+        permanent_entropy_mask = {$urandom(), $urandom()};
+        //permanent_entropy_mask = '1;
+        //permanent_entropy_mask = 64'hF77D_FAD5;
+    end
 	//Drive entropy pins (pretend to be entropy)
-    always_ff @(posedge top_clk) begin
-        entropy_source_array <= {$urandom(), $urandom()};
+    always_ff @(posedge ic_clk) begin
+        entropy_source_array <= {$urandom(), $urandom()} & permanent_entropy_mask;
     end
 
     always_comb begin
@@ -389,7 +172,7 @@ module top_io_tb;
                 shorts_received <= 0;
                 instr_select <= $urandom_range(5, 0);
             end else begin
-                rand_req <= 'x;
+                rand_req <= '0;
                 instr_select <= 6;
             end
 
@@ -431,7 +214,7 @@ module top_io_tb;
     // rising edge of slow_clk.
 
     property p_rand_byte_stable;
-		@(posedge top_clk)
+		@(posedge ic_clk)
 		disable iff ($rose(slow_clk))
         rand_valid |-> $stable(rand_byte);
     endproperty
@@ -442,7 +225,7 @@ module top_io_tb;
     // Asserts that while rand_valid is high, rand_byte can never be all 0.
     // This could happen organically however if you are really unlucky
     property p_rand_byte_not_zero;
-		@(posedge top_clk)
+		@(posedge ic_clk)
 		disable iff ($rose(slow_clk) || $rose(rand_valid))
         rand_valid |-> (rand_byte !== '0);
     endproperty
@@ -453,7 +236,7 @@ module top_io_tb;
     // Asserts that while rand_valid is high, rand_byte can never be an unknown value.
 
     property p_rand_byte_not_unknown;
-		@(posedge top_clk)
+		@(posedge ic_clk)
 		disable iff ($rose(slow_clk) || $rose(rand_valid))
         rand_valid |-> (!$isunknown(rand_byte));
     endproperty
@@ -463,39 +246,38 @@ module top_io_tb;
     // Assertion 4
     // Asserts that an outstanding request takes no longer than 5000 ns to serve (otherwise it's a timeout)
 
-    // initial begin : timeout_check_block // Use a named block for clarity
-    //     // Loop continuously until the 'debug' signal is set
-    //     forever begin
-    //         // 1. Check the disable condition *before* proceeding
-    //         if (debug) begin
-    //             $display("--- Assertion 4 Permanently Disabled: Debug mode active at time %t ---", $realtime);
-    //             break; // Exit the forever loop permanently
-    //         end
-    //         // 2. Wait for the starting condition
-    //         @(posedge rand_req);
-    //         // 3. Immediately check the disable condition again (in case 'debug' went high at the same time)
-    //         if (debug) begin
-    //             break; // Exit loop
-    //         end
-    //         // 4. Start the timeout detection
-    //         fork
-    //             #10000ns;     
-    //             @(negedge rand_req);  
-    //         join_any
-    //         assert (rand_req == 1'b0)
-    //         else $fatal(1, "ASIC TIMEOUT: 'rand_req' was held high for 10000ns at time %t", $realtime);
-            
-    //         disable fork;
-    //     end
-    // end : timeout_check_block
+    initial begin : timeout_check_block // Use a named block for clarity
+        // Loop continuously until the 'debug' signal is set
+        forever begin
+            // 1. Check the disable condition *before* proceeding
+            if (debug) begin
+                $display("--- Assertion 4 Permanently Disabled: Debug mode active at time %t ---", $realtime);
+                break; // Exit the forever loop permanently
+            end
+            // 2. Wait for the starting condition
+            @(posedge rand_req);
+            // 3. Immediately check the disable condition again (in case 'debug' went high at the same time)
+            if (debug) begin
+                break; // Exit loop
+            end
+            // 4. Start the timeout detection
+            fork
+                #10000ns;     
+                @(negedge rand_req);  
+            join_any
+            assert (rand_req == 1'b0)
+            else $fatal(1, "ASIC TIMEOUT: 'rand_req' was held high for 10000ns at time %t", $realtime);
+            disable fork;
+        end
+    end : timeout_check_block
 	
 	//Below are Tasks
 	task reset_dut();
         $display("Applying reset...");
         top_reset = 1'b1;
-        #5ns
+        #500ns
         top_reset = 1'b0;
-        #5ns
+        #500ns
 		top_reset = 1'b1;
     endtask
 
@@ -503,457 +285,20 @@ module top_io_tb;
         entropy_debug = '0;
         io_temp_debug = '0;
         input_pin_1 = '0;
+        output_to_input_direct = '0;
+        mosi = '0;
+        ss_n = '0;
     endtask
 
-    // task assert_debug();
-    //     $display("Asserting Debug Pin...");
-    //     debug = 1'b1;
-    // endtask
+    task assert_debug();
+        $display("Asserting Debug Pin...");
+        debug = 1'b1;
+    endtask
 
-    // task de_assert_debug();
-    //     $display("De-Asserting Debug Pin...");
-    //     debug = 1'b0;
-    // endtask
-
-    // task wait_spi_ready_delay();
-    //     fork
-    //         wait (spi_data_ready);
-    //         begin
-    //             repeat(10) @(posedge top_clk); 
-    //             if (!spi_data_ready) begin
-    //                 $fatal(0, "SPI Timeout Error: spi_data_ready did not become high within 10 cycles of top_clk.");
-    //             end
-    //         end
-    //     join_any 
-
-    //     repeat(3) @(posedge top_clk); 
-    // endtask
-
-	// task spi_write_only(input logic [WORD_WIDTH-1:0] data_to_send);
-    //     // Select the slave
-    //     @(posedge debug_clk);
-    //     ss_n = 0;
-    //     #15;
-
-    //     // Send data
-    //     @(negedge debug_clk);
-    //     for (int i=WORD_WIDTH-1; i>=0; i--) begin
-    //         mosi = data_to_send[i]; // MSB first
-    //         #10;
-    //     end
-
-    //     // Deselect the slave
-    //     ss_n = 1;
-    //     mosi = 0;
-    // endtask
-
-    // //------------------------------------------------------------------
-    // // Performs an SPI write-then-read transaction
-    // // Fills the 'master_received' variable in the testbench.
-    // //------------------------------------------------------------------
-    // task spi_write_read(input logic [WORD_WIDTH-1:0] data_to_send,
-    //                     output logic [WORD_WIDTH-1:0] data_received);
-        
-    //     data_received = '0; // Clear old data
-
-    //     // Select the slave
-    //     @(posedge debug_clk);
-    //     ss_n = 0;
-    //     #15;
-
-    //     // Send command
-    //     @(negedge debug_clk);
-    //     for (int i=WORD_WIDTH-1; i>=0; i--) begin
-    //         mosi = data_to_send[i]; // MSB first
-    //         #10;
-    //     end
-
-    //     #20; // Wait one cycle
-
-    //     // Read data
-    //     for (int i=WORD_WIDTH-1; i>=0; i--) begin
-    //         data_received[i] = miso;
-    //         #10;
-    //     end
-
-    //     // Deselect the slave
-    //     ss_n = 1;
-    //     mosi = 0;
-    // endtask
-
-	// // ------------------- Test reading from somewhere ----------------------
-	// task read_test
-	// (
-	// 	input read_cmd_name_e test_word
-	// );
-	// 	read_cmd_data_t current_struct;
-    //     $display("\n --- Test: %s ---", test_word.name());
-
-    //     // Call the task to perform the transaction
-    //     spi_write_read(test_word, master_received);
-	// 	current_struct = READ_CMD_MAP[test_word.name()];
-
-    //     // Check results
-    //     wait_spi_ready_delay();
-
-    //     if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         if (master_received == current_struct.exp_rsp) begin 
-    //             $display("%s read test PASSED ✓!", test_word.name());
-    //         end else begin
-    //             $error("%s read test FAILED ✘: Expected %h", test_word.name(), current_struct.exp_rsp);
-    //         end
-    //     end else begin
-    //         $display("%s read test FAILED ✘: data_ready not high at %t", test_word.name(), $realtime);
-    //     end
-    //     #20;
-
-	// endtask
-
-	// // ------------------- Try calibration bit write then read (Write then read reg 0x07) ----------------------
-	// task rw_calibration_bits ();
-    //     $display("\n --- Test: Write Calibration Bits ---");
-    //     test_word = 22'b1_0_0111_1100_0011_1100_0001; // Write 0xC3C1
-        
-    //     // Call the write-only task
-    //     spi_write_only(test_word);
-        
-    //     // Check result wait(spi_data_ready)
-    //     wait (spi_data_ready); 
-    //     repeat(3) @(posedge top_clk);
-
-    //     if (spi_data_ready) begin
-    //         @(negedge spi_data_ready) // Wait for signal to go low
-    //         $display("Internal Entropy Calibration Bits: %h", dut.mixed_IC.u_control.internal_entropy_calibration);
-    //         if (dut.mixed_IC.u_control.internal_entropy_calibration == 16'hC3C1) begin 
-    //             $display("Calibration bits write test PASSED ✓!");
-    //         end else begin
-    //             $error("Calibration bits write test FAILED ✘: Expected %h", 16'hC3C1);
-    //         end
-    //     end else begin
-    //         $display("Calibration bits write test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #80;
-
-	// 	$display("\n --- Test: Read Calibration Bits ---");
-    //     test_word = 22'b1_1_0111_0000_0000_0000_0000; // Read debug calibration bits
-
-    //     spi_write_read(test_word, master_received);
-        
-    //     // Check results
-    //     #1;
-
-    //     if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         if (master_received[15:0] == dut.mixed_IC.u_control.internal_entropy_calibration) begin
-    //             $display("Calibration bits read test PASSED ✓!");
-    //         end else begin
-    //             $error("Calibration bits read test FAILED ✘: Expected %h, Got %h", 
-    //                      dut.mixed_IC.u_control.internal_entropy_calibration, master_received);
-    //         end
-    //     end else begin
-    //         $display("Calibration bits read test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #20;
-	// endtask
-
-	// // ------------------- Try temp sensor 0 threshold write then read (Write then read reg 0x08) ----------------------
-	// task tempsensor0_rw ();
-	// 	$display("\n --- Test: Write temp sensor threshold 0 Bits ---");
-    //     test_word = 22'b1010000000000000010001 ; // Write 0x280011
-        
-    //     // Call the write-only task
-    //     spi_write_only(test_word);
-        
-    //     // Check results
-    //     wait (spi_data_ready); 
-        
-    //     if (spi_data_ready) begin
-    //         @(negedge spi_data_ready) // Wait for signal to go low
-    //         $display("Internal temp sensor threshold 0 Bits: %h", dut.mixed_IC.u_control.internal_temp_threshold_0);
-    //         if (dut.mixed_IC.u_control.internal_temp_threshold_0 == 16'h0011) begin
-    //             $display("Internal temp sensor threshold 0 bits write test PASSED ✓!");
-    //         end else begin
-    //             $error("Internal temp sensor threshold 0 bits write test FAILED ✘: Expected %h", 16'h0011);
-    //         end
-    //     end else begin
-    //         $display("Internal temp sensor threshold 0 bits write test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #80;
-
-        
-    //     $display("\n --- Test: Read temp sensor threshold 0 Bits ---");
-    //     test_word = 22'b1110000000000000000000; // Read threshold bits
-
-    //     spi_write_read(test_word, master_received);
-        
-    //     // Check results
-    //     wait (spi_data_ready); 
-    //     repeat(3) @(posedge top_clk);
-
-    //     if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         if (master_received[15:0] == dut.mixed_IC.u_control.internal_temp_threshold_0) begin
-    //             $display("Internal temp sensor threshold 0 bits read test PASSED ✓!");
-    //         end else begin
-    //             $error("Internal temp sensor threshold 0 bits read FAILED ✘: Expected %h, Got %h", 
-    //                      dut.mixed_IC.u_control.internal_temp_threshold_0, master_received);
-    //         end
-    //     end else begin
-    //         $display("Internal temp sensor threshold 0 bits read test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-
-    //     #20;
-	// endtask
-
-	// // ------------------- Try temp sensor 1 threshold write then read (Write then read reg 0x09) ----------------------
-	// task tempsensor1_rw ();
-	// 	$display("\n --- Test: Write temp sensor threshold 1 Bits ---");
-    //     test_word = 22'b1010010000000000000111 ; 
-        
-    //     // Call the write-only task
-    //     spi_write_only(test_word);
-        
-    //     // Check results
-    //     wait (spi_data_ready); 
-    //     repeat(3) @(posedge top_clk);
-
-    //     @(negedge spi_data_ready) // Wait for signal to go low
-    //     $display("Internal temp sensor threshold 1 Bits: %h", dut.mixed_IC.u_control.internal_temp_threshold_1);
-    //     if (dut.mixed_IC.u_control.internal_temp_threshold_1 == 16'h0007) begin
-    //         $display("Internal temp sensor threshold 1 bits write test PASSED ✓!");
-    //     end else begin
-    //         $error("Internal temp sensor threshold 1 bits write test FAILED ✘: Expected %h", 16'h0007);
-    //     end
-
-    //     #80;
-
-        
-    //     $display("\n --- Test: Read temp sensor threshold 1 Bits ---");
-    //     test_word = 22'b1110010000000000000000; // Read threshold bits
-
-    //     spi_write_read(test_word, master_received);
-        
-    //     // Check results
-    //     wait (spi_data_ready); if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         if (master_received[15:0] == dut.mixed_IC.u_control.internal_temp_threshold_1) begin
-    //             $display("Internal temp sensor threshold 1 bits read test PASSED ✓!");
-    //         end else begin
-    //             $error("Internal temp sensor threshold 1 bits read FAILED ✘: Expected %h, Got %h", 
-    //                      dut.mixed_IC.u_control.internal_temp_threshold_1, master_received);
-    //         end
-    //     end else begin
-    //         $display("Internal temp sensor threshold 1 bits read test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #20;
-	// endtask
-
-	// // ------------------- Try temp sensor 2 threshold write then read (Write then read reg 0x0A) ----------------------
-	// task tempsensor2_rw ();
-	// 	$display("\n --- Test: Write temp sensor threshold 2 Bits ---");
-    //     test_word = 22'b1010100000000000000011 ; // Write 0x2A0003
-        
-    //     // Call the write-only task
-    //     spi_write_only(test_word);
-        
-    //     // Check results
-    //     wait (spi_data_ready); if (spi_data_ready) begin
-    //         @(negedge spi_data_ready) // Wait for signal to go low
-    //         $display("Internal temp sensor threshold 2 Bits: %h", dut.mixed_IC.u_control.internal_temp_threshold_2);
-    //         if (dut.mixed_IC.u_control.internal_temp_threshold_2 == 16'h0003) begin
-    //             $display("Internal temp sensor threshold 2 bits write test PASSED ✓!");
-    //         end else begin
-    //             $error("Internal temp sensor threshold 2 bits write test FAILED ✘: Expected %h", 16'h0003);
-    //         end
-    //     end else begin
-    //         $display("Internal temp sensor threshold 2 bits write test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #80;
-
-        
-    //     $display("\n --- Test: Read temp sensor threshold 2 Bits ---");
-    //     test_word = 22'b1010100000000000000000; // Read threshold bits
-
-    //     spi_write_read(test_word, master_received);
-        
-    //     // Check results
-    //     wait (spi_data_ready); if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         if (master_received[15:0] == dut.mixed_IC.u_control.internal_temp_threshold_2) begin
-    //             $display("Internal temp sensor threshold 2 bits write test PASSED ✓!");
-    //         end else begin
-    //             $error("Internal temp sensor threshold 2 bits write FAILED ✘: Expected %h, Got %h", 
-    //                      dut.mixed_IC.u_control.internal_temp_threshold_2, master_received);
-    //         end
-    //     end else begin
-    //         $display("Internal temp sensor threshold 2 bits write test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #20;
-	// endtask
-
-	// // ------------------- Try temp sensor 3 threshold write then read (Write then read reg 0x0B) ----------------------
-	// task tempsensor3_rw ();
-	// 	$display("\n --- Test: Write temp sensor threshold 3 Bits ---");
-    //     test_word = 22'b1010110000000000000101; // Write 0x2B0005
-        
-    //     // Call the write-only task
-    //     spi_write_only(test_word);
-        
-    //     // Check results
-    //     wait (spi_data_ready); if (spi_data_ready) begin
-    //         @(negedge spi_data_ready) // Wait for signal to go low
-    //         $display("Internal temp sensor threshold 3 Bits: %h", dut.mixed_IC.u_control.internal_temp_threshold_3);
-    //         if (dut.mixed_IC.u_control.internal_temp_threshold_3 == 16'h0005) begin
-    //             $display("Internal temp sensor threshold 3 bits write test PASSED ✓!");
-    //         end else begin
-    //             $error("Internal temp sensor threshold 3 bits write test FAILED ✘: Expected %h", 16'h0005);
-    //         end
-    //     end else begin
-    //         $display("Internal temp sensor threshold 3 bits write test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #80;
-
-        
-    //     $display("\n --- Test: Read temp sensor threshold 3 Bits ---");
-    //     test_word = 22'b1110110000000000000000; // Read threshold bits
-
-    //     spi_write_read(test_word, master_received);
-        
-    //     // Check results
-    //     wait (spi_data_ready); if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         if (master_received[15:0] == dut.mixed_IC.u_control.internal_temp_threshold_3) begin
-    //             $display("Internal temp sensor threshold 3 bits write test PASSED ✓!");
-    //         end else begin
-    //             $error("Internal temp sensor threshold 3 bits write FAILED ✘: Expected %h, Got %h", 
-    //                      dut.mixed_IC.u_control.internal_temp_threshold_3, master_received);
-    //         end
-    //     end else begin
-    //         $display("Internal temp sensor threshold 3 bits write test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #20;
-
-	// endtask
-
-	// // ------------------- Test reading from temp counter 0  (Write then read reg 0x0C) ----------------------
-	// task tempctr0_rw ();
-	// 	$display("\n --- Test: Read Temp Counter 0 ---");
-    //     test_word = 22'b1_1_1100_0000_0000_0000_0000;
-        
-    //     // Call the task to perform the transaction
-    //     spi_write_read(test_word, master_received);
-
-    //     // Check results
-    //     wait (spi_data_ready);if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         // Add your check here
-    //     end else begin
-    //         $error("TX Test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #20;
-	// endtask
-
-	// // ------------------- Test reading from temp counter 1 (Write then read reg 0x0D) ----------------------
-	// task tempctr1_rw ();
-	// 	$display("\n --- Test: Read Temp Counter 1 ---");
-    //     test_word = 22'b1_1_1101_0000_0000_0000_0000;
-        
-    //     spi_write_read(test_word, master_received);
-
-    //     // Check results
-    //     wait (spi_data_ready); if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         // Add your check here
-    //     end else begin
-    //         $display("TX Test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #20;
-	// endtask
-
-	// // ------------------- Test reading from temp counter 2 (Write then read reg 0x0E) ----------------------
-	// task tempctr2_rw();
-	// 	$display("\n --- Test: Read Temp Counter 2 ---");
-    //     test_word = 22'b1_1_1110_0000_0000_0000_0000;
-        
-    //     spi_write_read(test_word, master_received);
-
-    //     // Check results
-    //     wait (spi_data_ready); if (spi_data_ready) begin
-    //         $display("Data received by master: %h", master_received);
-    //         // Add your check here
-    //     end else begin
-    //         $display("TX Test FAILED ✘: data_ready not high at %t", $realtime);
-    //     end
-    //     #20;
-	// endtask
-
-	// task tempctr3_rw();
-	// 	$display("\n --- Test: Read Temp Counter 3 ---");
-    //     test_word = 22'b1_1_1111_0000_0000_0000_0000;
-        
-    //     spi_write_read(test_word, master_received);
-
-    //     wait_spi_ready_delay();
-
-    //     $display("Data received by master: %h", master_received);
-
-    //     #20;
-	// endtask
-
-    // //asserts that within ten cycles, serial_input does something
-    // property serial_input_goes_high;
-    //     @(posedge top_clk) (dut.mixed_IC.conditioner_0.serial_input [=0:9]);
-    // endproperty
-
-    // task conditioner_debug_test();
-    //     $display("\n --- Test: Isolate and Drive Conditioner ---");
-
-    //     test_word = 22'b0100101000000011100000;
-    //     conditioner_serial_input = 384'h7b3a9f0e5c6d2814b7f8c9d0a3e5b6f7a8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c2e3f4a5b6c7d8e9f;
-    //     spi_write_only(test_word);
-
-    //     wait_spi_ready_delay();
-
-    //     if(
-    //         dut.mixed_IC.conditioner_0.debug_register == 7'b110_0000
-    //         && dut.mixed_IC.conditioner_0.debug_cond == 1'b1
-    //         && dut.mixed_IC.conditioner_0.debug_ctr != '0
-    //     ) begin
-    //         $display("Isolate Conditioner Passed ✓");
-    //     end else begin
-    //         $error("Isolate Conditioner Failed ✘");
-    //     end
-
-    //     for (int i=0; i <= 383; i++) begin
-    //         input_pin_1 = conditioner_serial_input[i];
-    //         @(posedge top_clk);
-    //     end
-
-    // endtask
-
-    // task run_random_debug_test();   
-        
-    //     int rand_choice;
-
-    //     rand_choice = $urandom_range(9, 0);
-
-        
-    //     case(rand_choice)
-    //         0: rw_calibration_bits();
-    //         1: tempsensor0_rw();
-    //         2: tempsensor1_rw();
-    //         3: tempsensor2_rw();
-    //         4: tempsensor3_rw();
-    //         5: tempctr0_rw();
-    //         6: tempctr1_rw();
-    //         7: tempctr2_rw();
-    //         8: tempctr3_rw();
-    //         9: conditioner_debug_test();
-    //     endcase
-
-    // endtask
-
+    task de_assert_debug();
+        $display("De-Asserting Debug Pin...");
+        debug = 1'b0;
+    endtask
 
 
 	//Main loop -> drive reset, drive normal behavior, and also randomly test DFT tasks intermittently.
@@ -962,7 +307,6 @@ module top_io_tb;
 		$fsdbDumpvars(0, "+all");
         init();
 		reset_dut();
-		#5000ns
 
         // assert_debug();
         // repeat (50) begin
@@ -972,7 +316,7 @@ module top_io_tb;
         // end
         // de_assert_debug();
 
-        #100000ns
+        #200000ns
 		$finish();
 	end
 

@@ -28,9 +28,9 @@ TRIVIUM_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/trivium_tb.
 QUE_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/que_tb.sv $(PWD)/hdl/fifo.sv
 
 
-SYNTH_TB_SRCS 	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_synth_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/hvl/top_io.gate.v $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v
+SYNTH_TB_SRCS 	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_synth_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/../syn/synout_for_pnr/top_io.gate.v $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v
 
-PNR_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_pnr_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/hdl/top_io.pnr.v  $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v $(PWD)/hvl/capacitors.sv
+PNR_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_pnr_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/../pnr/pnrout_saved/top_io.pnr.v  $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v $(PWD)/hvl/capacitors.sv
 
 #Michael
 CONTROL_TB_SRCS := $(PWD)/hvl/control_tb.sv $(PWD)/hdl/spi.sv $(PWD)/hdl/control.sv
@@ -40,7 +40,7 @@ SPI_TB_SRCS := $(PWD)/hvl/spi_tb.sv $(PWD)/hdl/spi.sv
 
 export VCS_ARCH_OVERRIDE=linux
 VCS_FLAGS      = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -fsdb -suppress=LCA_FEATURES_ENABLED -j4 +notimingcheck -assert svaext +define+RISCV_FORMAL +define+TOP_DIR=$TOP_DIR 
-VCS_FLAGS_POST = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -fsdb -suppress=LCA_FEATURES_ENABLED -j4 +notimingcheck +neg_tchk -negdelay +compsdf +mindelays +sdfverbose -fgp
+VCS_FLAGS_POST = -full64 -lca -sverilog -timescale=1ps/1ps -debug_acc+all -kdb -fsdb -suppress=LCA_FEATURES_ENABLED -j4 +neg_tchk -negdelay +compsdf +mindelays +sdfverbose -fgp
 
 #Filelists
 TOP_IO_FILELIST := $(PWD)/filelists/top_io_filelist.f
@@ -198,7 +198,7 @@ sram:
 .PHONY: post_pnr
 post_pnr: $(PNR_TB_SRCS)
 	mkdir -p vcs
-	cd vcs && vcs $(PNR_TB_SRCS) $(VCS_FLAGS_POST) -l post_pnr_compile.log -o post_pnr_tb
+	cd vcs && vcs $(PNR_TB_SRCS) $(VCS_FLAGS_POST) +notimingcheck -l post_pnr_compile.log -o post_pnr_tb
 	cd vcs && ./post_pnr_tb -l pnr_simulation.log
 
 
@@ -206,7 +206,7 @@ post_pnr: $(PNR_TB_SRCS)
 .PHONY: post_synth
 post_synth: $(SYNTH_TB_SRCS)
 	mkdir -p vcs
-	cd vcs && vcs $(SYNTH_TB_SRCS) $(VCS_FLAGS_POST) -l synth_compile.log -o post_synth_tb
+	cd vcs && vcs $(SYNTH_TB_SRCS) $(VCS_FLAGS_POST) +notimingcheck -l synth_compile.log -o post_synth_tb
 	cd vcs && ./post_synth_tb -l synth_simulation.log
 
 

@@ -12,8 +12,8 @@ module top (
     // PHYSICAL PINS
 
     //CLK+RST
-    input logic ic_clk,    // Clock from clock gen IC
-    input logic rst_n,    // Reset (active low)
+    input logic clk,        // Clock 
+    input logic rst_n,      // Reset (active low)
 
     //CPU I/O
     input logic rand_req,                       // Request pin (active high)
@@ -24,7 +24,7 @@ module top (
     
     // SPI Pins
     input logic ss_n,       // Slave Select (active low)
-    input logic debug_clk,  // Debug clock from FPGA
+    //input logic debug_clk,  // Debug clock from FPGA
     input logic mosi,       // Master Out Slave In
     output logic miso,      // Master In Slave Out
     output logic spi_data_ready, //This will be useful for SPI communication
@@ -55,9 +55,7 @@ module top (
     input logic [es_sources-1:0] entropy_source_array,
     output logic [latch_sources-1:0][calib_bits-1:0] arr_n, 
     output logic [latch_sources-1:0][calib_bits-1:0] arr_p,
-    output logic [jitter_sources-1:0] jitter_disable_arr,
-
-    output logic analog_clk
+    output logic [jitter_sources-1:0] jitter_disable_arr
 
 
 );
@@ -98,7 +96,6 @@ module top (
     logic [63:0] triv_out;
 
     // Wires to connect control to other modules (from control)
-    logic        clk;
     logic        latch_entropy_mux_out;     // Serial debug output from selected latch entropy source
     logic        jitter_entropy_mux_out;    // Serial debug output from selected latch entropy source
     logic [11:0] entropy_calibration;       // Entropy calibration value for debug
@@ -120,8 +117,9 @@ module top (
 
     // Instantiate the control module
     control u_control (
-        .ic_clk(ic_clk),
-        .debug_clk(debug_clk),
+        .clk(clk),
+        //.ic_clk(ic_clk),
+        //.debug_clk(debug_clk),
         .rst_n(rst_n),
         .mosi(mosi),
         .ss_n(ss_n),
@@ -134,7 +132,7 @@ module top (
         .output_to_input_direct(output_to_input_direct),
         .spi_data_ready(spi_data_ready),
 
-        .clk(clk), // This is the new system clock (muxed between ic_clk and debug_clk pins)
+        //.clk(clk), // This is the new system clock (muxed between ic_clk and debug_clk pins)
         
         .latch_entropy_mux_out(latch_entropy_mux_out), // Serial output from selected latch entropy source
         .jitter_entropy_mux_out(jitter_entropy_mux_out), // Serial debug output from selected latch entropy source
@@ -172,9 +170,6 @@ module top (
 
         .curr_state(curr_state)
     );
-
-    assign analog_clk = clk; 
-
     
     // Mux between Latch Entropy Sources and Latch OHT. This 
     logic [5:0] output_select_latch_entropy_oht;
@@ -284,8 +279,6 @@ module top (
 
     logic triv_debug;
     assign triv_debug = (curr_state[6:0] == 7'b1100001 && debug) ? 1'b1 : 1'b0;
-
-
 
     //Instantiate Trivium:
     trivium_top tri_state ( 

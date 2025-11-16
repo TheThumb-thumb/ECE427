@@ -1,7 +1,8 @@
 module control (
     // PHYSICAL PINS (will be pass through in top.sv)
-    input logic ic_clk,     // Clock from clock gen IC
-    input logic debug_clk, // Debug clock from FPGA
+    //input logic ic_clk,     // Clock from clock gen IC
+    //input logic debug_clk, // Debug clock from FPGA
+    input logic clk,     // Clock from clock gen IC
     input logic rst_n,    // Reset (active low)
     input logic mosi,     // Master Out Slave In
     input logic ss_n,     // Slave Select (active low)
@@ -15,13 +16,13 @@ module control (
     output logic spi_data_ready,
 
     // INTERNAL CLOCK CONNECTION  
-    output logic clk, // This is muxed between ic_clk and debug_clk
+    //output logic clk, // This is muxed between ic_clk and debug_clk
     
     // ENTROPY SOURCE CONNECTIONS
     input logic latch_entropy_mux_out, // Direct connection to latch entropy output. Index of entropy source detemined by cell select bits
     input logic jitter_entropy_mux_out, // Direct connection to jitter entropy output. Index of entropy source detemined by cell select bits
 
-    output logic [11:0] entropy_calibration, //Upper 8 are CAL_N, lower 8 are CAL_P
+    output logic [11:0] entropy_calibration, //Upper 6 are CAL_N, lower 6 are CAL_P
 
     // OHT CONNECTIONS
     output logic latch_oht_mux_in, // Latch OHT Mux input
@@ -68,7 +69,7 @@ module control (
 
     logic [21:0] debug_state; //0x02
 
-    logic [15:0] internal_entropy_calibration;
+    logic [11:0] internal_entropy_calibration;
 
     logic [13:0] internal_temp_threshold_0;// Temp sensor 0 threshold, 0x05
     logic [13:0] internal_temp_threshold_1;// Temp sensor 1 threshold, 0x06
@@ -143,22 +144,28 @@ module control (
     end
 
     // Clock Mux
-    assign clk = debug ? debug_clk : ic_clk;
+    // assign clk = debug ? debug_clk : ic_clk;
 
     // State comb
     always_comb begin : state_logic
-        if (debug && write_debug_state)
+        if (debug && write_debug_state) begin
             next_state = new_debug_state_value;
-        else if ((!temp_sense_0_good || !temp_sense_1_good || !temp_sense_2_good || !temp_sense_3_good) && !io_temp_debug)
+            debug_state = new_debug_state_value;
+        end
+        else if ((!temp_sense_0_good || !temp_sense_1_good || !temp_sense_2_good || !temp_sense_3_good) && !io_temp_debug) begin
             next_state = HALT_STATE;
-        else
+            debug_state = 22'd0;
+        end
+        else begin
             next_state = curr_state;
+            debug_state = 22'd0;
+        end
     end
     
     always_ff @(posedge clk) begin  //Mostly everything
         if (!rst_n) begin
             curr_state <= DEFAULT_STATE;
-            internal_entropy_calibration <= 16'b1100_0000_1100_0000;
+            internal_entropy_calibration <= 12'b0000_0000_0000;
             internal_temp_threshold_0 <= 14'b0;
             internal_temp_threshold_1 <= 14'b0;
             internal_temp_threshold_2 <= 14'b0;
@@ -184,24 +191,24 @@ module control (
                             4'h0: data_to_send <= {1'b0, DEFAULT_STATE}; // Default state
                             4'h1: data_to_send <= {1'b0, debug_state};   // Debug State
 
-                            4'h2: data_to_send <= {1'b0, output_buffer_control_reg};    // Output buffer controls (trivium disable and clock divider)
+                            4'h2: data_to_send <= {16'b0, output_buffer_control_reg};    // Output buffer controls (trivium disable and clock divider)
 
-                            4'h3: data_to_send <= {9'h0, internal_lower_latch_entropy_good}; // Entropy Status Latch [0:15]
-                            4'h4: data_to_send <= {9'h0, internal_upper_latch_entropy_good}; // Entropy Status Latch [16:31]
-                            4'h5: data_to_send <= {9'h0, internal_lower_jitter_entropy_good}; // Entropy Status Jitter [0:15]
-                            4'h6: data_to_send <= {9'h0, internal_upper_jitter_entropy_good}; // Entropy Status Latch [16:31]
+                            4'h3: data_to_send <= {6'h0, internal_lower_latch_entropy_good}; // Entropy Status Latch [0:15]
+                            4'h4: data_to_send <= {6'h0, internal_upper_latch_entropy_good}; // Entropy Status Latch [16:31]
+                            4'h5: data_to_send <= {6'h0, internal_lower_jitter_entropy_good}; // Entropy Status Jitter [0:15]
+                            4'h6: data_to_send <= {6'h0, internal_upper_jitter_entropy_good}; // Entropy Status Latch [16:31]
 
-                            4'h7: data_to_send <= {8'h0, internal_entropy_calibration}; // Calibration bits for latch
+                            4'h7: data_to_send <= {10'h0, internal_entropy_calibration}; // Calibration bits for latch
 
-                            4'h8: data_to_send <= {10'h0, internal_temp_threshold_0}; // Temp threshold 0
-                            4'h9: data_to_send <= {10'h0, internal_temp_threshold_1}; // Temp threshold 1
-                            4'hA: data_to_send <= {10'h0, internal_temp_threshold_2}; // Temp threshold 2
-                            4'hB: data_to_send <= {10'h0, internal_temp_threshold_3}; // Temp threshold 3
+                            4'h8: data_to_send <= {8'h0, internal_temp_threshold_0}; // Temp threshold 0
+                            4'h9: data_to_send <= {8'h0, internal_temp_threshold_1}; // Temp threshold 1
+                            4'hA: data_to_send <= {8'h0, internal_temp_threshold_2}; // Temp threshold 2
+                            4'hB: data_to_send <= {8'h0, internal_temp_threshold_3}; // Temp threshold 3
 
-                            4'hC: data_to_send <= {10'h0, internal_temp_counter_0}; // Temp sensor 0 counter (read-only)
-                            4'hD: data_to_send <= {10'h0, internal_temp_counter_1}; // Temp sensor 1 counter (read-only)
-                            4'hE: data_to_send <= {10'h0, internal_temp_counter_2}; // Temp sensor 2 counter (read-only)
-                            4'hF: data_to_send <= {10'h0, internal_temp_counter_3}; // Temp sensor 3 counter (read-only)
+                            4'hC: data_to_send <= {8'h0, internal_temp_counter_0}; // Temp sensor 0 counter (read-only)
+                            4'hD: data_to_send <= {8'h0, internal_temp_counter_1}; // Temp sensor 1 counter (read-only)
+                            4'hE: data_to_send <= {8'h0, internal_temp_counter_2}; // Temp sensor 2 counter (read-only)
+                            4'hF: data_to_send <= {8'h0, internal_temp_counter_3}; // Temp sensor 3 counter (read-only)
             
                             default: data_to_send <= 22'hED_BEF; // Invalid Address
                         endcase

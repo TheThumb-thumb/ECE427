@@ -25,7 +25,6 @@ module top_io_tb;
 
 	const read_cmd_data_t READ_CMD_MAP[read_cmd_name_e] = '{
 		READ_DEFAULT_STATE: '{cmd: 22'b1100000000000000000000, exp_rsp: '0},
-		READ_HALT_STATE: 	'{cmd: 22'b1100010000000000000000, exp_rsp: 22'hED_BEF},
 		READ_LATCH_LS: 		'{cmd: 22'b1100110000000000000000, exp_rsp: '0},
 		READ_LATCH_MS: 		'{cmd: 22'b1101000000000000000000, exp_rsp: '0},
 		READ_JITTER_LS: 	'{cmd: 22'b1101010000000000000000, exp_rsp: '0},
@@ -33,7 +32,6 @@ module top_io_tb;
 	};
 
 	// Clock generation
-    logic debug_clk;
     logic ic_clk;
 	logic top_clk;
 
@@ -84,23 +82,17 @@ module top_io_tb;
 
 	//Drive clocks
 	initial begin
-        debug_clk = 0;
-        forever #5 debug_clk = ~debug_clk; // 100 MHz clock
-    end
-
-	initial begin
         ic_clk = 0;
         forever #2 ic_clk = ~ic_clk; // 500 MHz clock
     end
 
 	always_comb begin
-		if(debug) top_clk = debug_clk;
-		else top_clk = ic_clk;
+		top_clk = ic_clk;
 	end
 
 	top_io dut(
 		// CLK+RST
-		.ic_clk_io(ic_clk),
+		.ic_clk_io(top_clk),
 		.rst_n_io(top_reset),
 	
 		// CPU I/O
@@ -112,7 +104,6 @@ module top_io_tb;
 
 		// SPI Pins
 		.ss_n_io(ss_n),
-		.debug_clk_io(debug_clk),
 		.mosi_io(mosi),
 		.miso_io(miso),
 		.spi_data_ready_io(spi_data_ready),
@@ -139,17 +130,17 @@ module top_io_tb;
         .arr_n(arr_n),
         .arr_p(),
         .jitter_disable_arr(),
-        .analog_clk(),
-        .vdd_A(),
-        .vdd_B(),
-        .jitter_vdd_A(),
-        .jitter_vdd_B()
-		
+        .analog_clk()
+
 	);
 
+    logic [63:0] permanent_entropy_mask;
+    initial begin
+        permanent_entropy_mask = {$urandom(), $urandom()};
+    end
 	//Drive entropy pins (pretend to be entropy)
     always_ff @(posedge top_clk) begin
-        entropy_source_array <= {$urandom(), $urandom()};
+        entropy_source_array <= {$urandom(), $urandom()} & permanent_entropy_mask;
     end
 
     always_comb begin
@@ -287,17 +278,22 @@ module top_io_tb;
 	task reset_dut();
         $display("Applying reset...");
         top_reset = 1'b1;
-        #5ns
+        repeat(2) @(posedge top_clk);
         top_reset = 1'b0;
-        #5ns
+        repeat(2) @(posedge top_clk);
 		top_reset = 1'b1;
     endtask
+
+    logic test;
 
     task init();
         entropy_debug = '0;
         io_temp_debug = '0;
         input_pin_1 = '0;
         output_to_input_direct = '0;
+        mosi = '0;
+        ss_n = '1;
+        test = '0;
     endtask
 
     task assert_debug();
@@ -335,21 +331,17 @@ module top_io_tb;
             end
         end
     
-
-        repeat(3) @(posedge top_clk); 
     endtask
 
 	task spi_write_only(input logic [WORD_WIDTH-1:0] data_to_send);
         // Select the slave
-        @(posedge debug_clk);
         ss_n = 0;
-        #15;
+        @(posedge top_clk);
 
         // Send data
-        @(negedge debug_clk);
         for (int i=WORD_WIDTH-1; i>=0; i--) begin
             mosi = data_to_send[i]; // MSB first
-            #10;
+            @(posedge top_clk);
         end
 
         // Deselect the slave
@@ -361,33 +353,36 @@ module top_io_tb;
     // Performs an SPI write-then-read transaction
     // Fills the 'master_received' variable in the testbench.
     //------------------------------------------------------------------
+    
     task spi_write_read(input logic [WORD_WIDTH-1:0] data_to_send,
                         output logic [WORD_WIDTH-1:0] data_received);
-        
-        data_received = '0; // Clear old data
 
         // Select the slave
-        @(posedge debug_clk);
+        data_received = '0; // Clear old data
         ss_n = 0;
-        @(posedge debug_clk);
+        @(posedge top_clk);
 
         // Send command
-        @(negedge debug_clk);
         for (int i=WORD_WIDTH-1; i>=0; i--) begin
             mosi = data_to_send[i]; // MSB first
-            @(posedge debug_clk);
+            @(posedge top_clk);
         end
 
-        @(posedge debug_clk);
+        repeat(5) @(posedge top_clk);
 
         // Read data
         for (int i=WORD_WIDTH-1; i>=0; i--) begin
+            test = 1'b1;
             data_received[i] = miso;
-            @(posedge debug_clk);
+            if(i == 2) ss_n = 1;
+            @(posedge top_clk);
         end
 
+        test = 1'b0;
+
         // Deselect the slave
-        ss_n = 1;
+        $display("spi_read_write done  ", $realtime);
+
         mosi = 0;
     endtask
 
@@ -413,29 +408,25 @@ module top_io_tb;
             $error("%s read test FAILED ✘: Expected %h", test_word.name(), current_struct.exp_rsp);
         end
 
-        #20;
-
 	endtask
 
 	// ------------------- Try calibration bit write then read (Write then read reg 0x07) ----------------------
 	task rw_calibration_bits ();
         $display("\n --- Test: Write Calibration Bits ---");
-        test_word = 22'b1_0_0111_1100_0011_1100_0001; // Write 0xC3C1
+        test_word = 22'b1_0_0111_0000_1000_0010_0001; // Write 0x821
         
         // Call the write-only task
         spi_write_only(test_word);
         
-        // Check result wait(spi_data_ready)
+        // Check result
         wait_spi_ready_delay();
 
         $display("Internal Entropy Calibration Bits: %h", dut.mixed_IC.u_control.internal_entropy_calibration);
-        if (dut.mixed_IC.u_control.internal_entropy_calibration == 16'hC3C1) begin 
+        if (dut.mixed_IC.u_control.internal_entropy_calibration == 12'h821) begin 
             $display("Calibration bits write test PASSED ✓!");
         end else begin
-            $error("Calibration bits write test FAILED ✘: Expected %h", 16'hC3C1);
+            $error("Calibration bits write test FAILED ✘: Expected %h ", 12'h821, $realtime);
         end
-
-        #80;
 
 		$display("\n --- Test: Read Calibration Bits ---");
         test_word = 22'b1_1_0111_0000_0000_0000_0000; // Read debug calibration bits
@@ -450,10 +441,9 @@ module top_io_tb;
             $display("Calibration bits read test PASSED ✓!");
         end else begin
             $error("Calibration bits read test FAILED ✘: Expected %h, Got %h", 
-                        dut.mixed_IC.u_control.internal_entropy_calibration, master_received);
+                        dut.mixed_IC.u_control.internal_entropy_calibration, master_received, $realtime);
         end
 
-        #20;
 	endtask
 
 	// ------------------- Try temp sensor 0 threshold write then read (Write then read reg 0x08) ----------------------
@@ -474,7 +464,6 @@ module top_io_tb;
             $error("Internal temp sensor threshold 0 bits write test FAILED ✘: Expected %h", 16'h0011);
         end
 
-        #80;
         
         $display("\n --- Test: Read temp sensor threshold 0 Bits ---");
         test_word = 22'b1110000000000000000000; // Read threshold bits
@@ -491,7 +480,6 @@ module top_io_tb;
                         dut.mixed_IC.u_control.internal_temp_threshold_0, master_received);
         end
 
-        #20;
 	endtask
 
 	// ------------------- Try temp sensor 1 threshold write then read (Write then read reg 0x09) ----------------------
@@ -511,7 +499,6 @@ module top_io_tb;
             $error("Internal temp sensor threshold 1 bits write test FAILED ✘: Expected %h", 16'h0007);
         end
 
-        #80;
 
         $display("\n --- Test: Read temp sensor threshold 1 Bits ---");
         test_word = 22'b1110010000000000000000; // Read threshold bits
@@ -529,7 +516,6 @@ module top_io_tb;
                         dut.mixed_IC.u_control.internal_temp_threshold_1, master_received);
         end
 
-        #20;
 	endtask
 
 	// ------------------- Try temp sensor 2 threshold write then read (Write then read reg 0x0A) ----------------------
@@ -549,7 +535,6 @@ module top_io_tb;
         end else begin
             $error("Internal temp sensor threshold 2 bits write test FAILED ✘: Expected %h", 16'h0003);
         end
-        #80;
 
         
         $display("\n --- Test: Read temp sensor threshold 2 Bits ---");
@@ -568,7 +553,6 @@ module top_io_tb;
                         dut.mixed_IC.u_control.internal_temp_threshold_2, master_received);
         end
 
-        #20;
 	endtask
 
 	// ------------------- Try temp sensor 3 threshold write then read (Write then read reg 0x0B) ----------------------
@@ -589,7 +573,6 @@ module top_io_tb;
             $error("Internal temp sensor threshold 3 bits write test FAILED ✘: Expected %h", 16'h0005);
         end
 
-        #80;
 
         
         $display("\n --- Test: Read temp sensor threshold 3 Bits ---");
@@ -607,8 +590,6 @@ module top_io_tb;
                         dut.mixed_IC.u_control.internal_temp_threshold_3, master_received);
         end
 
-        #20;
-
 	endtask
 
 	// ------------------- Test reading from temp counter 0  (Write then read reg 0x0C) ----------------------
@@ -623,7 +604,6 @@ module top_io_tb;
         
         $display("Data received by master: %h", master_received);
 
-        #20;
 	endtask
 
 	// ------------------- Test reading from temp counter 1 (Write then read reg 0x0D) ----------------------
@@ -637,7 +617,6 @@ module top_io_tb;
 
         $display("Data received by master: %h", master_received);
 
-        #20;
 	endtask
 
 	// ------------------- Test reading from temp counter 2 (Write then read reg 0x0E) ----------------------
@@ -649,9 +628,7 @@ module top_io_tb;
         wait_spi_ready_delay();
         
         $display("Data received by master: %h", master_received);
-        // Add your check here
 
-        #20;
 	endtask
 
 	task tempctr3_rw();
@@ -664,7 +641,6 @@ module top_io_tb;
 
         $display("Data received by master: %h", master_received);
 
-        #20;
 	endtask
 
     //asserts that within ten cycles, serial_input does something
@@ -680,6 +656,7 @@ module top_io_tb;
         spi_write_only(test_word);
 
         wait_spi_ready_delay();
+        repeat(2) @(posedge top_clk);
 
         if(
             dut.mixed_IC.conditioner_0.debug_register == 7'b110_0000
@@ -709,17 +686,14 @@ module top_io_tb;
 
         // Check results
         wait_spi_ready_delay();
+        @(posedge top_clk);
 
-        // NOTE: Check your internal signal path. 
-        // 'curr_state' is probably not a TB signal.
         $display("Next state: %h", dut.mixed_IC.u_control.curr_state); 
         
-        // This check seems to compare an internal state with the command word.
-        // Adjust this if logic is different.
         if (dut.mixed_IC.u_control.next_state == test_word) begin
             $display("Next state Test PASSED ✓!");
         end else begin
-            $display("Next state FAILED ✘: Expected %h", test_word);
+            $error("Next state FAILED ✘: Expected %h", test_word);
         end
         
 
@@ -729,8 +703,35 @@ module top_io_tb;
             @(posedge top_clk);
         end
 
-        #1000;
         output_to_input_direct = 1'b0;
+    endtask
+
+    task output_buffer_debug_test();
+        $display("\n --- Test: Try to make Output buffer as fast as debug_clk (threshold == 0) and force enable trivium ---");
+
+        test_word = 22'b0100101000000011100000;
+
+        spi_write_only(test_word);
+
+        wait_spi_ready_delay();
+
+        $display("Next state: %h", dut.mixed_IC.u_control.curr_state); 
+
+        if (dut.mixed_IC.u_control.next_state == test_word) begin
+            $display("Next state Test PASSED ✓!");
+        end else begin
+            $error("Next state FAILED ✘: Expected %h", test_word);
+        end
+
+        if(
+                dut.mixed_IC.output_buffer_inst.debug == 1'b1
+            &&  dut.mixed_IC.output_buffer_inst.output_buffer_control == 6'b111_111
+            &&  dut.mixed_IC.output_buffer_inst.triv_mode_true == 1'b1
+        ) begin
+            $display("Isolate Conditioner Passed ✓");
+        end else begin
+            $error("Isolate Conditioner Failed ✘");
+        end
 
     endtask
 
@@ -738,7 +739,7 @@ module top_io_tb;
         
         int rand_choice;
 
-        rand_choice = $urandom_range(10, 0);
+        rand_choice = $urandom_range(11, 0);
 
         
         case(rand_choice)
@@ -753,6 +754,7 @@ module top_io_tb;
             8: tempctr3_rw();
             9: conditioner_debug_test();
             10: bypass_oht();
+            11: output_buffer_debug_test();
         endcase
 
     endtask
@@ -765,16 +767,27 @@ module top_io_tb;
 		$fsdbDumpvars(0, "+all");
         init();
 		reset_dut();
-
+        repeat(100) @(posedge top_clk);
         assert_debug();
+        repeat(100) @(posedge top_clk);
+
         repeat (100) begin
             run_random_debug_test(); 
-            #50ns
-            reset_dut();
+            @(posedge top_clk);
+        end
+        de_assert_debug();
+        reset_dut();
+
+        repeat(20000) @(posedge top_clk);
+
+        assert_debug();
+        repeat(100) @(posedge top_clk);
+        repeat (100) begin
+            run_random_debug_test(); 
+            @(posedge top_clk);
         end
         de_assert_debug();
 
-        #100000ns
 		$finish();
 	end
 

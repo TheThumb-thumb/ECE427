@@ -76,7 +76,6 @@ logic rdrand_valid;
 //Misc + for both
 output_buffer_state_t ob_cur_state, ob_next_state;
 logic [2:0] out_counter;
-logic extended_rst_n;
 
 //Drive registers based on if debug mode is active
 logic [4:0] slow_clk_threshold;
@@ -85,7 +84,7 @@ always_comb begin
         slow_clk_threshold = output_buffer_control[5:1];
         triv_mode_true = output_buffer_control[0];
     end else begin
-        slow_clk_threshold = 4;
+        slow_clk_threshold = 1;
         triv_mode_true = triv_mode;
     end
 end 
@@ -96,12 +95,10 @@ always_ff @ (posedge clk) begin
     if(!rst_n) begin
         slow_clk_counter <= '0;
         slow_clk <= '0;
-        extended_rst_n <= '0;
     end else begin
         if(slow_clk_counter == slow_clk_threshold) begin
             slow_clk_counter <= '0;
             slow_clk <= ~slow_clk;
-            if(!extended_rst_n && slow_clk) extended_rst_n <= '1;
         end
         else slow_clk_counter <= slow_clk_counter + 1;
     end
@@ -148,6 +145,7 @@ always_ff @ (posedge clk) begin
     if(!rst_n) begin
         rdrand_cur_state <= RDRAND_BUF_INVALID;
         triv_counter <= '0;
+        rdrand_buffer <= '0;
     end else begin
 
         case (rdrand_cur_state)
@@ -202,8 +200,8 @@ always_comb begin
 end
 
 //Process blocks for outputting numbers to Host 
-always_ff @ (posedge slow_clk) begin
-    if(!extended_rst_n) begin
+always_ff @ (posedge slow_clk or negedge rst_n) begin
+    if(!rst_n) begin
         seed_queue_tail <= '0;
         seed_counter <= '0;
         rand_counter <= '0;

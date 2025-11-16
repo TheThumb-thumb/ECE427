@@ -34,6 +34,8 @@ logic [SEED_BITS-1:0] seed_material;
 logic                seed_valid_pulse;
 logic [SEED_BITS-1:0] additional_input_zero;
 
+logic out_ready_int;
+
 logic                drbg_busy;
 logic                drbg_done;
 logic                drbg_rand_v;
@@ -48,6 +50,8 @@ logic                 reseed_fired;
 
 assign num_blocks_1         = 16'd1;       // Stream one block at a time
 assign additional_input_zero = '0;
+
+assign out_ready_int = drbg_debug_mode_i ? 1'b1: out_ready_i; 
 
 // Seed latch (capture from conditioner once per (re)seed)
 logic [SEED_BITS-1:0] seed_latched;
@@ -102,7 +106,7 @@ always_ff @(posedge clk) begin
         end
 
         // Downstream took the word
-        if (hold_valid && out_ready_i) begin
+        if (hold_valid && out_ready_int) begin
             hold_valid <= 1'b0;
         end
     end
@@ -130,12 +134,14 @@ wstate_t state, state_n;
 logic [SEED_BITS-1:0] dbg_shift_reg;
 logic [$clog2(SEED_BITS+1)-1:0 ] dbg_bit_cnt;
 logic dbg_seed_ready;
+logic dbg_flag;
 
 always_ff @(posedge clk) begin
   if (!rst_n) begin
     dbg_shift_reg  <= '0;
     dbg_bit_cnt    <= '0;
     dbg_seed_ready <= 1'b0;
+    dbg_flag <= '0;
   end else begin
     // default: clear "ready" unless we just finished loading
     dbg_seed_ready <= 1'b0;
@@ -147,7 +153,8 @@ always_ff @(posedge clk) begin
       if (signed'(dbg_bit_cnt) == signed'(SEED_BITS-1)) begin
         dbg_bit_cnt    <= '0;
         dbg_seed_ready <= 1'b1;  // we now have a full 256-bit seed
-      end else begin
+        dbg_flag <= 1'b1;
+      end else if (!dbg_flag)begin
         dbg_bit_cnt <= dbg_bit_cnt + 1'b1;
       end
     end else begin
@@ -245,8 +252,10 @@ always_comb begin
 
         W_RUN: begin
             // If downstream can accept (either empty or will consume next),
-            if (!out_valid_o || (out_valid_o && out_ready_i)) begin
-              if (blocks_since_reseed >= RESEED_INTERVAL) begin
+            if (!out_valid_o || (out_valid_o && out_ready_int)) begin
+              if (dbg_seed_ready && drbg_debug_mode_i) begin
+                state_n = W_RESEED_REQ;
+              end else if (blocks_since_reseed >= RESEED_INTERVAL) begin
                   state_n = W_RESEED_REQ;   // go to reseed path, not fresh instantiate
                   // do NOT reset blocks_since_reseed here; wait until reseed completes
               end else if (!drbg_busy) begin
@@ -268,10 +277,10 @@ always_comb begin
                 end
             end else begin
                 // DEBUG MODE: re-use debug stream to load a new seed
-                if (dbg_seed_ready) begin
+           
                 seed_stretch_ld_reseed = 1'b1;
                 state_n                = W_RESEED_PULSE;
-                end
+            
             end
         end
 
@@ -288,10 +297,23 @@ always_comb begin
         end
 
 
+        // W_WAIT_RESEED: begin
+        //   if (drbg_done)
+        //     state_n = W_RUN;
+        // end
+
+
         W_WAIT_RESEED: begin
-          if (drbg_done)
+          if (!drbg_debug_mode_i)begin
+            if (drbg_done)begin
+              state_n = W_RUN;
+            end
+          end
+          else begin
             state_n = W_RUN;
+          end
         end
+
 
 
         default: state_n = W_IDLE;

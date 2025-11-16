@@ -19,9 +19,6 @@ module streaming_bit_compactor #(
     logic [WIDTH-1:0] compacted;
     logic [$clog2(WIDTH+1)-1:0] num_good_bits;
 
-    // ------------------------------------------
-    // Compact data_in based on mask_in
-    // ------------------------------------------
     always_comb begin
         compacted = '0;
         num_good_bits = '0;
@@ -33,26 +30,31 @@ module streaming_bit_compactor #(
         end
     end
 
-    // ------------------------------------------
-    // Streaming buffer / output logic
-    // ------------------------------------------
+    logic [BUFFER_WIDTH-1:0] next_buffer;
+    logic [$clog2(BUFFER_WIDTH+1)-1:0] next_count;
+
+    always_comb begin
+        next_buffer = buffer[WIDTH-1:0] | (compacted << buffer_count);
+        next_count  = buffer_count + num_good_bits;
+    end
+
     always_ff @(posedge clk) begin
         if (rst) begin
-            buffer        <= '0;
-            buffer_count  <= '0;
-            valid_out     <= 1'b0;
-            data_out      <= '0;
+            buffer          <= '0;
+            buffer_count    <= '0;
+            valid_out       <= 1'b0;
+            data_out        <= '0;
         end else begin
             valid_out <= 1'b0;  // default low
 
             if (valid_in) begin
                 // Predict next state
-                logic [BUFFER_WIDTH-1:0] next_buffer;
-                logic [$clog2(BUFFER_WIDTH+1)-1:0] next_count;
+                // logic [BUFFER_WIDTH-1:0] next_buffer;
+                // logic [$clog2(BUFFER_WIDTH+1)-1:0] next_count;
 
-                // Append new bits (concatenate compacted at current buffer_count position)
-                next_buffer = buffer[WIDTH-1:0] | (compacted << buffer_count);
-                next_count  = buffer_count + num_good_bits;
+                // Append new bits
+                // next_buffer <= buffer[WIDTH-1:0] | (compacted << buffer_count);
+                // next_count  <= buffer_count + num_good_bits;
 
                 // Check if we have a full output word
                 if (next_count >= WIDTH) begin
@@ -64,7 +66,7 @@ module streaming_bit_compactor #(
                     buffer       <= next_buffer >> WIDTH;
                     buffer_count <= next_count - WIDTH;
                 end else begin
-                    // Not enough bits yet — just update partial buffer
+                    // Not enough bits yet, update partial buffer
                     buffer       <= next_buffer;
                     buffer_count <= next_count;
                 end
@@ -73,3 +75,4 @@ module streaming_bit_compactor #(
     end
 
 endmodule
+
