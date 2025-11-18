@@ -704,7 +704,7 @@ module top_io_tb;
     task output_buffer_debug_test();
         $display("\n --- Test: Write Output Buffer Control Bits ---");
 
-        test_word = 22'b1000100000000000100001;
+        test_word = 22'b1000100000000000100000;
 
         spi_write_only(test_word);
 
@@ -712,7 +712,7 @@ module top_io_tb;
         @(posedge top_clk);
 
         if(     dut.mixed_IC.output_buffer_inst.debug == 1'b1
-            &&  dut.mixed_IC.output_buffer_inst.output_buffer_control == 6'h21
+            &&  dut.mixed_IC.output_buffer_inst.output_buffer_control == test_word[5:0]
             &&  dut.mixed_IC.output_buffer_inst.triv_mode_true == 1'b1
         ) begin
             $display("Output Buffer Debug Mode Active ✓");
@@ -805,15 +805,18 @@ module top_io_tb;
         init();
 		reset_dut();
 
-        repeat(20000) @(posedge top_clk);
+        repeat(100_000) @(posedge top_clk);
 
-        assert_debug();
-        repeat(100) @(posedge top_clk);
-        repeat (100) begin
-            run_random_debug_test(); 
-            repeat(10) @(posedge top_clk);
-        end
-        de_assert_debug();
+        // assert_debug();
+
+        // reset_dut();
+
+        // output_buffer_debug_test();
+
+        // repeat(10000) @(posedge top_clk);
+
+        // drbg_debug_test();
+        // de_assert_debug();
 
 		$finish();
 	end

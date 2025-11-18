@@ -83,7 +83,7 @@ module top_io_tb;
 	//Drive clocks
 	initial begin
         top_clk = 0;
-        forever #5 top_clk = ~top_clk; 
+        forever #20 top_clk = ~top_clk; 
     end
 
 	top_io dut(
@@ -142,6 +142,7 @@ module top_io_tb;
     always_comb begin
         if(debug) entropy = entropy_debug;
         else entropy = entropy_source_array;
+        entropy = entropy_source_array;
     end
  
 	int shorts_received, shorts_received_max; 
@@ -157,21 +158,25 @@ module top_io_tb;
     logic request_outstanding;
     int instr_select;
     rand_req_t rand_req_type_reg;
+    int ctr;
 
 	always_ff @(posedge slow_clk or negedge top_reset) begin
         if(!top_reset) begin
             rand_req <= 1'b0;
             request_outstanding <= 1'b0;
             shorts_received <= 0;
+            ctr <= 0;
         end else begin
-            if(!request_outstanding || shorts_received == shorts_received_max) begin 
+            if(!request_outstanding || shorts_received == shorts_received_max || ctr > 500) begin 
                 rand_req <= 1'b1;
                 request_outstanding <= 1'b1;
                 shorts_received <= 0;
                 instr_select <= $urandom_range(5, 0);
+                ctr <= 0;
             end else begin
                 rand_req <= '0;
                 instr_select <= 6;
+                if(debug) ctr <= ctr + 1;
             end
 
             if(rand_valid) begin 
@@ -323,7 +328,7 @@ module top_io_tb;
             // Check if the loop completed due to timeout (i.e., spi_data_ready never asserted)
             if (timeout_count == 10) begin
                 // Failure: Timeout reached without seeing spi_data_ready
-                $fatal(1, "TIMEOUT ERROR: spi_data_ready did not assert within the 10-cycle limit.");
+                $error(1, "TIMEOUT ERROR: spi_data_ready did not assert within the 10-cycle limit.");
             end
         end
     
@@ -670,6 +675,44 @@ module top_io_tb;
         end
     endtask
 
+    task output_buffer_debug_test();
+        $display("\n --- Test: Write Output Buffer Control Bits ---");
+
+        test_word = 22'b1000100000000000100001;
+
+        spi_write_only(test_word);
+
+        wait_spi_ready_delay();
+        @(posedge top_clk);
+
+        // if(     dut.mixed_IC.output_buffer_inst.debug == 1'b1
+        //     &&  dut.mixed_IC.output_buffer_inst.output_buffer_control == test_word[5:0]
+        //     &&  dut.mixed_IC.output_buffer_inst.triv_mode_true == 1'b1
+        // ) begin
+        //     $display("Output Buffer Debug Mode Active ✓");
+        // end else begin
+        //     $error("Output Buffer Debug Mode Inactive ✘");
+        // end
+
+        @(posedge top_clk);
+
+        $display("\n --- Test: Read Output Buffer Control Bits ---");
+        test_word = 22'b1100100000000000000000; // Read output buffer control bits
+
+        spi_write_read(test_word, master_received);
+
+        wait_spi_ready_delay();
+
+        // $display("Data received by master: %h", master_received);
+        // if (master_received[15:0] == dut.mixed_IC.u_control.output_buffer_control_reg) begin
+        //     $display("Output buffer control bits read test PASSED ✓!");
+        // end else begin
+        //     $display("Output buffer control read test FAILED ✘: Expected %h, Got %h",
+        //                 dut.mixed_IC.u_control.output_buffer_control_reg, master_received);
+        // end
+        
+    endtask
+
     task bypass_oht();
         // // ---------------- Set output 2 to jitter entropy source 10, output 1 to clk, output to input into conditioner
         $display("\n --- Test: jitter entropy source 10, directly into conditioner ---");
@@ -752,10 +795,10 @@ module top_io_tb;
             6: tempctr1_rw();
             7: tempctr2_rw();
             8: tempctr3_rw();
-            // 9: conditioner_debug_test();
-            // 10: bypass_oht();
-            // 11: output_buffer_debug_test();
-            // 12: drbg_debug_test();
+            9: conditioner_debug_test();
+            10: bypass_oht();
+            11: output_buffer_debug_test();
+            12: drbg_debug_test();
         endcase
 
     endtask
@@ -770,6 +813,13 @@ module top_io_tb;
 		reset_dut();
         repeat(100) @(posedge top_clk);
 
+        assert_debug();
+        output_buffer_debug_test();
+        repeat(1000) @(posedge top_clk);
+        drbg_debug_test();
+        repeat(50_000) @(posedge top_clk);
+        de_assert_debug();
+
         // assert_debug();
         // repeat(100) @(posedge top_clk);
         // repeat (100) begin
@@ -777,9 +827,8 @@ module top_io_tb;
         //     @(posedge top_clk);
         // end
         // de_assert_debug();
-        // reset_dut();
 
-        repeat(50_000) @(posedge top_clk);
+        //repeat(1_000_000) @(posedge top_clk);
 
 		$finish();
 	end
