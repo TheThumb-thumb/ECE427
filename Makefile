@@ -28,9 +28,9 @@ TRIVIUM_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/trivium_tb.
 QUE_TB_SRCS := $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/que_tb.sv $(PWD)/hdl/fifo.sv
 
 
-SYNTH_TB_SRCS 	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_synth_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/../syn/synout_for_pnr/top_io.gate.v $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v
+SYNTH_TB_SRCS 	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_synth_tb.sv $(PWD)/sram_rf/oht_dp_sram_final/verilog/oht_dp_sram_final.v $(PWD)/../syn/synout_for_pnr/top_io.gate.v $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v
 
-PNR_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_pnr_tb.sv $(PWD)/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v $(PWD)/../pnr/pnrout_saved/top_io.pnr.v  $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v $(PWD)/hvl/capacitors.sv
+PNR_TB_SRCS   	:= $(shell find $(PWD)/pkg/ -name '*.sv') $(PWD)/hvl/post_pnr_tb.sv $(PWD)/sram_rf/oht_dp_sram_final/verilog/oht_dp_sram_final.v $(PWD)/../pnr/pnrout_final/top_io.pnr.v  $(TSMC65RF_PDK_IC6)/stdcell_dig/fb_tsmc065gp_rvt_lvt/aci/sc-ad10/verilog/tsmc65_rvt_sc_adv10.v $(PWD)/hvl/capacitors.sv
 
 #Michael
 CONTROL_TB_SRCS := $(PWD)/hvl/control_tb.sv $(PWD)/hdl/spi.sv $(PWD)/hdl/control.sv
