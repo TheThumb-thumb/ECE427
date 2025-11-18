@@ -19,49 +19,66 @@ module streaming_bit_compactor #(
     logic [WIDTH-1:0] compacted;
     logic [$clog2(WIDTH+1)-1:0] num_good_bits;
 
+    logic [BUFFER_WIDTH-1:0] next_buffer;
+    logic [$clog2(BUFFER_WIDTH+1)-1:0] next_count;
+
+    logic flag;
+
     always_comb begin
         compacted = '0;
         num_good_bits = '0;
-        for (int i = 0; i < WIDTH; i++) begin
-            if (mask_in[i]) begin
-                compacted[num_good_bits] = data_in[i];
-                num_good_bits++;
+        if (!rst) begin
+            compacted = '0;
+            num_good_bits = '0;
+        end else begin
+            for (int i = 0; i < WIDTH; i++) begin
+                if (mask_in[i] && valid_in) begin
+                    compacted[num_good_bits] = data_in[i];
+                    num_good_bits++;
+                end
             end
         end
     end
 
-    logic [BUFFER_WIDTH-1:0] next_buffer;
-    logic [$clog2(BUFFER_WIDTH+1)-1:0] next_count;
-
     always_comb begin
-        next_buffer = buffer[WIDTH-1:0] | (compacted << buffer_count);
-        next_count  = buffer_count + num_good_bits;
+        next_buffer = buffer;
+        next_count = num_good_bits;
+        if (!rst) begin
+            next_buffer = '0;
+            next_count = '0;
+        end else begin
+            if (valid_in) begin
+                next_buffer = buffer[WIDTH-1:0] | (compacted << buffer_count);
+                next_count  = buffer_count + num_good_bits;
+            end
+        end
     end
 
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (!rst) begin
             buffer          <= '0;
             buffer_count    <= '0;
             valid_out       <= 1'b0;
             data_out        <= '0;
+            flag <= '0;
         end else begin
             valid_out <= 1'b0;  // default low
 
             if (valid_in) begin
                 // Predict next state
-                // logic [BUFFER_WIDTH-1:0] next_buffer;
-                // logic [$clog2(BUFFER_WIDTH+1)-1:0] next_count;
 
                 // Append new bits
-                // next_buffer <= buffer[WIDTH-1:0] | (compacted << buffer_count);
-                // next_count  <= buffer_count + num_good_bits;
 
                 // Check if we have a full output word
-                if (next_count >= WIDTH) begin
+                if (next_count >= WIDTH && !flag) begin
+                    flag <= 1'b1;
+                    data_out     <= next_buffer[WIDTH-1:0];
+                    buffer       <= next_buffer >> WIDTH;
+                    buffer_count <= next_count - WIDTH;
+                end else if (next_count >= WIDTH && flag) begin
                     // Output one full 32-bit word
                     data_out  <= next_buffer[WIDTH-1:0];
                     valid_out <= 1'b1;
-
                     // Shift leftover bits and update buffer
                     buffer       <= next_buffer >> WIDTH;
                     buffer_count <= next_count - WIDTH;

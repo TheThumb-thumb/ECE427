@@ -22,7 +22,7 @@ module que_fiao #(
 
     // Sequential logic
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (!rst) begin
             buffer_reg  <= '0;
             counter_reg <= '0;
         end else begin
@@ -34,7 +34,7 @@ module que_fiao #(
     // Combinational logic
     always_comb begin
 
-        if (rst) begin
+        if (!rst) begin
 
             full = 1'b0;
             empty = 1'b1;

@@ -118,8 +118,6 @@ module top (
     // Instantiate the control module
     control u_control (
         .clk(clk),
-        //.ic_clk(ic_clk),
-        //.debug_clk(debug_clk),
         .rst_n(rst_n),
         .mosi(mosi),
         .ss_n(ss_n),
@@ -131,8 +129,6 @@ module top (
         .input_pin_1(input_pin_1),
         .output_to_input_direct(output_to_input_direct),
         .spi_data_ready(spi_data_ready),
-
-        //.clk(clk), // This is the new system clock (muxed between ic_clk and debug_clk pins)
         
         .latch_entropy_mux_out(latch_entropy_mux_out), // Serial output from selected latch entropy source
         .jitter_entropy_mux_out(jitter_entropy_mux_out), // Serial debug output from selected latch entropy source
@@ -221,7 +217,7 @@ module top (
     // Instantiate the OHT
     oht_top oht_inst_0 (
         .clk(clk),
-        .rst(~rst_n),
+        .rst(rst_n),
 
         .ES_in(entropy_source_array),
         .deque(oht_cond_ready),
@@ -321,11 +317,11 @@ module top (
 
         // debug
         .drbg_debug_mode_i(drbg_debug),
-        .drbg_serial_i(CTD_debug_input),
+        .drbg_serial_i(CTD_debug_input)
 
-        // unconnected shit
-        .busy_o(),        
-        .blocks_since_reseed_o()
+        // // unconnected shit
+        // .busy_o(),        
+        // .blocks_since_reseed_o()
     );
 
     // Instantiate the output buffer

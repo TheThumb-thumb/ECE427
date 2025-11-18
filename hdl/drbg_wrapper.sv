@@ -18,11 +18,11 @@ module ctr_drbg_wrapper #(
   // Streaming output to buffer/consumer ready/valid
   output logic                 out_valid_o,
   input  logic                 out_ready_i,
-  output logic [127:0]         out_data_o,
+  output logic [127:0]         out_data_o
 
   // Status/telemetry
-  output logic                 busy_o,        // high when not idle
-  output logic [15:0]          blocks_since_reseed_o // remove blocks since reseed 
+  // output logic                 busy_o,        // high when not idle
+  // output logic [15:0]          blocks_since_reseed_o // remove blocks since reseed 
 );
 
 // DRBG Wires
@@ -58,7 +58,7 @@ logic [SEED_BITS-1:0] seed_latched;
 
 // Reseed interval counter
 logic [15:0] blocks_since_reseed, blocks_since_reseed_n;
-assign blocks_since_reseed_o = blocks_since_reseed;
+// assign blocks_since_reseed_o = blocks_since_reseed;
 
 // DRBG core
 aes_ctr_drbg #(
@@ -183,7 +183,7 @@ always_comb begin
     drbg_ready_o      = 1'b0;
 
     // Busy
-    busy_o            = (state != W_IDLE);
+    // busy_o            = (state != W_IDLE);
 
     // Counter default
     blocks_since_reseed_n = blocks_since_reseed;

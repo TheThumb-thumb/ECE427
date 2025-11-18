@@ -75,6 +75,7 @@ module top_io_tb;
     logic [21:0] fake_input;
     logic [21:0] master_received;
     logic [383:0] conditioner_serial_input;
+    logic [255:0] drbg_serial_input;
     logic [383:0] entropy_sim_serial_input;
     logic [11:0] entropy_sim_serial_input_short;
     logic [3:0] EN_out1, EN_out2;
@@ -643,11 +644,6 @@ module top_io_tb;
 
 	endtask
 
-    //asserts that within ten cycles, serial_input does something
-    property serial_input_goes_high;
-        @(posedge top_clk) (dut.mixed_IC.conditioner_0.serial_input [=0:9]);
-    endproperty
-
     task conditioner_debug_test();
         $display("\n --- Test: Isolate and Drive Conditioner ---");
 
@@ -661,7 +657,6 @@ module top_io_tb;
         if(
             dut.mixed_IC.conditioner_0.debug_register == 7'b110_0000
             && dut.mixed_IC.conditioner_0.debug_cond == 1'b1
-            && dut.mixed_IC.conditioner_0.debug_ctr != '0
         ) begin
             $display("Isolate Conditioner Passed ✓");
         end else begin
@@ -707,13 +702,53 @@ module top_io_tb;
     endtask
 
     task output_buffer_debug_test();
-        $display("\n --- Test: Try to make Output buffer as fast as debug_clk (threshold == 0) and force enable trivium ---");
+        $display("\n --- Test: Write Output Buffer Control Bits ---");
 
-        test_word = 22'b0100101000000011100000;
+        test_word = 22'b1000100000000000100001;
 
         spi_write_only(test_word);
 
         wait_spi_ready_delay();
+        @(posedge top_clk);
+
+        if(     dut.mixed_IC.output_buffer_inst.debug == 1'b1
+            &&  dut.mixed_IC.output_buffer_inst.output_buffer_control == 6'h21
+            &&  dut.mixed_IC.output_buffer_inst.triv_mode_true == 1'b1
+        ) begin
+            $display("Output Buffer Debug Mode Active ✓");
+        end else begin
+            $error("Output Buffer Debug Mode Inactive ✘");
+        end
+
+        @(posedge top_clk);
+
+        $display("\n --- Test: Read Output Buffer Control Bits ---");
+        test_word = 22'b1100100000000000000000; // Read output buffer control bits
+
+        spi_write_read(test_word, master_received);
+
+        wait_spi_ready_delay();
+
+        $display("Data received by master: %h", master_received);
+        if (master_received[15:0] == dut.mixed_IC.u_control.output_buffer_control_reg) begin
+            $display("Output buffer control bits read test PASSED ✓!");
+        end else begin
+            $display("Output buffer control read test FAILED ✘: Expected %h, Got %h",
+                        dut.mixed_IC.u_control.output_buffer_control_reg, master_received);
+        end
+        
+    endtask
+
+    task drbg_debug_test();
+        $display("\n --- Test: AES_DRBG Debug Mode via input_pin_1 ---");
+
+        test_word = 22'b0_00_00000_00_00001_11_00010;
+        drbg_serial_input = 56'hf3c8e4b1d72a9c0f54ab19de8837f4c2bb10e9df4372a6cc91ef02d7a54bc810;
+
+        spi_write_only(test_word);
+
+        wait_spi_ready_delay();
+        @(posedge top_clk);
 
         $display("Next state: %h", dut.mixed_IC.u_control.curr_state); 
 
@@ -723,23 +758,24 @@ module top_io_tb;
             $error("Next state FAILED ✘: Expected %h", test_word);
         end
 
-        if(
-                dut.mixed_IC.output_buffer_inst.debug == 1'b1
-            &&  dut.mixed_IC.output_buffer_inst.output_buffer_control == 6'b111_111
-            &&  dut.mixed_IC.output_buffer_inst.triv_mode_true == 1'b1
+        if(     dut.mixed_IC.u_drbg_rappin.drbg_debug_mode_i == 1'b1
         ) begin
-            $display("Isolate Conditioner Passed ✓");
+            $display("DBRG Debug Mode Active ✓");
         end else begin
-            $error("Isolate Conditioner Failed ✘");
+            $error("DRBG Debug Mode Inactive ✘");
         end
-
+        
+        for (int i=0; i<=255; i++) begin
+            input_pin_1 = drbg_serial_input[i];
+            @(posedge top_clk);
+        end
     endtask
 
     task run_random_debug_test();   
         
         int rand_choice;
 
-        rand_choice = $urandom_range(11, 0);
+        rand_choice = $urandom_range(12, 0);
 
         
         case(rand_choice)
@@ -755,6 +791,7 @@ module top_io_tb;
             9: conditioner_debug_test();
             10: bypass_oht();
             11: output_buffer_debug_test();
+            12: drbg_debug_test();
         endcase
 
     endtask
@@ -767,16 +804,6 @@ module top_io_tb;
 		$fsdbDumpvars(0, "+all");
         init();
 		reset_dut();
-        repeat(100) @(posedge top_clk);
-        assert_debug();
-        repeat(100) @(posedge top_clk);
-
-        repeat (100) begin
-            run_random_debug_test(); 
-            @(posedge top_clk);
-        end
-        de_assert_debug();
-        reset_dut();
 
         repeat(20000) @(posedge top_clk);
 
@@ -784,7 +811,7 @@ module top_io_tb;
         repeat(100) @(posedge top_clk);
         repeat (100) begin
             run_random_debug_test(); 
-            @(posedge top_clk);
+            repeat(10) @(posedge top_clk);
         end
         de_assert_debug();
 

@@ -262,7 +262,6 @@ io_out out_spi_data_ready (
 
 top mixed_IC (
     .clk(ic_clk),    
-    //.ic_clk(ic_clk),
     .rst_n(rst_n_reg),
 
     .rand_req(rand_req_reg),
@@ -272,7 +271,6 @@ top mixed_IC (
     .slow_clk(slow_clk),
 
     .ss_n(ss_n_reg),
-    //.debug_clk(debug_clk),
     .mosi(mosi_reg),
     .miso(miso),
     .spi_data_ready(spi_data_ready),

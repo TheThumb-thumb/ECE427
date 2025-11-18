@@ -28,7 +28,7 @@ logic window;
 logic flag, calib_flag;
 
 always_ff @( posedge clk ) begin
-    if (rst) begin
+    if (!rst) begin
         flag <= '0;
     end else if (sample_cnt[5]) begin
         flag <= 1'b1;
@@ -60,7 +60,7 @@ always_comb begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         valid <= '0;
     end else if (good_entropy_out_flag) begin
         valid <= '1;
@@ -70,7 +70,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @( posedge clk ) begin
-    if (rst) begin
+    if (!rst) begin
         window <= '0;
     end else if (sample_cnt == 1023) begin
         window <= 1'b1;
@@ -82,7 +82,7 @@ always_ff @( posedge clk ) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         sample_cnt <= '0;
     end else if (inter_fail || perm_fail) begin
         sample_cnt <= '0;
@@ -94,7 +94,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         entropy_counter <= '0;
     end else if(inter_fail || rep_fail || adaptive_fail || entropy_counter == 1023 || window) begin
         entropy_counter <= '0;
@@ -107,7 +107,7 @@ end
 
 always_ff @(posedge clk) begin
 
-    if (rst) begin
+    if (!rst) begin
         buff_reg <= '0;
     end else if (!full) begin
         buff_reg <= {buff_reg[C_PERM-2:0], adc_in};
@@ -121,7 +121,7 @@ assign calibration_arr_p = calibration_arr_p_curr;
 
 always_ff @(posedge clk) begin
 
-    if (rst) begin
+    if (!rst) begin
         calibration_arr_n_curr <= 6'b000000; // checkout 0111111
         calibration_arr_p_curr <= 6'b000000; // all 1s
     end else if (debug_mode) begin
@@ -136,7 +136,7 @@ end
 
 always_ff @(posedge clk) begin
 
-    if (rst) begin
+    if (!rst) begin
         good_entropy_out_flag <= '0;
     end else if (window) begin
         good_entropy_out_flag <= good_entropy_out;

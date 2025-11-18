@@ -13,7 +13,7 @@ $TOP_DIR/hdl/drbg_wrapper.sv
 
 $TOP_DIR/hdl/rng_temp_ctrl.v
 
-$TOP_DIR/sram_rf/oht_dp_sram_not_tcc_correct/verilog/oht_dp_sram_not_tcc_correct.v
+$TOP_DIR/sram_rf/oht_dp_sram_final/verilog/oht_dp_sram_final.v
 $TOP_DIR/hdl/Online_Health_Test.sv
 $TOP_DIR/hdl/ohtJ.sv
 $TOP_DIR/hdl/oht_aes_shifter.sv

@@ -76,7 +76,7 @@ assign TQB = '0;
 assign mask_in = latch_jitter_flag_rd ? rd_good_arr[63:32] : rd_good_arr[latch_sources-1:0];
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         rd_reg_out <= '0;
         wr_reg_out <= '0;
         wr_reg1 <= '0;
@@ -94,7 +94,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         cnt <= '0;
         latch_jitter_flag <= '0;
     end else if (full) begin
@@ -115,7 +115,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         read_cnt_flag <= '0;
     end else if (cnt > 31) begin // so once cnt hits 31 this goes high and we start reading
         read_cnt_flag <= 1'b1;
@@ -126,7 +126,7 @@ end
 
 always_ff @(posedge clk) begin
 
-    if (rst) begin
+    if (!rst) begin
         read_cnt <= '0;
         latch_jitter_flag_rd <= '0;
     end else if (full) begin
@@ -150,7 +150,7 @@ end
 // for input comb logic
 always_comb begin
     wr_reg_next = wr_reg;
-    if (rst) begin
+    if (!rst) begin
         wr_reg_next = '0;
         rd_reg_next = '0;
     end
@@ -259,7 +259,7 @@ assign TPENB = 1'b0;
 assign sram_clk = clk;
 assign sram_rst = rst;
 
-oht_dp_sram_not_tcc_correct rng_storage(
+oht_dp_sram_final rng_storage(
     // outputs:
     // A
     .CENYA(),  // here but empty ,not unconnected
@@ -312,7 +312,7 @@ oht_dp_sram_not_tcc_correct rng_storage(
     .PENB(PENB), // good
     .TPENB(TPENB), // good
 
-    .RETN(~sram_rst)
+    .RETN(sram_rst)
 );
 
 endmodule

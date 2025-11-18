@@ -24,7 +24,7 @@ logic window;
 logic good_entropy_out;
 
 always_ff @( posedge clk ) begin
-    if (rst) begin
+    if (!rst) begin
         window <= '0;
     end else if (sample_cnt == 1023) begin
         window <= 1'b1;
@@ -34,7 +34,7 @@ always_ff @( posedge clk ) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         sample_cnt <= '0;
     end else if (inter_fail || perm_fail) begin
         sample_cnt <= '0;
@@ -44,7 +44,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         entropy_counter <= '0;
     end else if (perm_fail) begin
         entropy_counter <= '0;
@@ -58,7 +58,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @( posedge clk ) begin : perm_check
-    if (rst) begin
+    if (!rst) begin
         flag <= '0;
         flag_nxt <= '0;
         in_curr <= '0;
@@ -72,7 +72,7 @@ always_ff @( posedge clk ) begin : perm_check
 end
 
 always_ff @(posedge clk) begin
-    if (rst || inter_fail) begin
+    if (!rst || inter_fail) begin
        perm_cnt <= '0;
     end else if (perm_fail) begin
         // do nothing
@@ -84,7 +84,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         inter_fail <= '0;
         inter_cnt <= '0;
     end else if (perm_fail) begin
@@ -98,7 +98,7 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @(posedge clk) begin
-    if (rst) begin
+    if (!rst) begin
         valid <= '0;
     end else if (good_entropy_out) begin
         valid <= '1;
@@ -108,7 +108,17 @@ always_ff @(posedge clk) begin
 end
 
 assign perm_fail = (inter_cnt == 2'b11 && perm_cnt == 30) ? 1'b1 : 1'b0;
-assign j_disable = perm_fail || inter_fail;
+logic disable_flag;
+
+always_ff @(posedge clk) begin
+    if (!rst) begin
+        disable_flag <= '0;
+    end else begin
+        disable_flag <= '1;
+    end
+end
+
+assign j_disable = !(perm_fail || inter_fail) && disable_flag;
 
 always_comb begin
 
@@ -118,15 +128,15 @@ always_comb begin
             good_entropy_out = '0;
         end else if (entropy_counter < 255 && entropy_counter >= 128) begin     // 12.5-25
             good_entropy_out = '0;
-        end else if (entropy_counter < 460 && entropy_counter >= 256) begin     // 25-45
+        end else if (entropy_counter < 460 && entropy_counter >= 255) begin     // 25-45
             good_entropy_out = '0;
-        end else if (entropy_counter < 563 && entropy_counter >= 461) begin     // 45-55
+        end else if (entropy_counter < 563 && entropy_counter >= 460) begin     // 45-55
             good_entropy_out = '1;
-        end else if (entropy_counter < 767 && entropy_counter >= 564) begin     // 55-75
+        end else if (entropy_counter < 767 && entropy_counter >= 563) begin     // 55-75
             good_entropy_out = '0;
-        end else if (entropy_counter < 895 && entropy_counter >= 768) begin     // 75-87.5
+        end else if (entropy_counter < 895 && entropy_counter >= 767) begin     // 75-87.5
             good_entropy_out = '0;
-        end else if (entropy_counter <= 1023 && entropy_counter >= 896) begin   // 87.5-100
+        end else if (entropy_counter <= 1023 && entropy_counter >= 895) begin   // 87.5-100
             good_entropy_out = '0;
         end         
     end

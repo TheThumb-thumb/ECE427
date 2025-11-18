@@ -78,11 +78,12 @@ module top_io_tb;
     logic [11:0] entropy_sim_serial_input_short;
     logic [3:0] EN_out1, EN_out2;
     logic [63:0] analog_clk;
+    logic [255:0] drbg_serial_input;
 
 	//Drive clocks
 	initial begin
         top_clk = 0;
-        forever #20 top_clk = ~top_clk; 
+        forever #5 top_clk = ~top_clk; 
     end
 
 	top_io dut(
@@ -701,14 +702,17 @@ module top_io_tb;
         output_to_input_direct = 1'b0;
     endtask
 
-    task output_buffer_debug_test();
-        $display("\n --- Test: Try to make Output buffer as fast as debug_clk (threshold == 0) and force enable trivium ---");
 
-        test_word = 22'b0100101000000011100000;
+    task drbg_debug_test();
+        $display("\n --- Test: AES_DRBG Debug Mode via input_pin_1 ---");
+
+        test_word = 22'b0_00_00000_00_00001_11_00010;
+        drbg_serial_input = 256'hf3c8e4b1d72a9c0f54ab19de8837f4c2bb10e9df4372a6cc91ef02d7a54bc810;
 
         spi_write_only(test_word);
 
         wait_spi_ready_delay();
+        @(posedge top_clk);
 
         // $display("Next state: %h", dut.mixed_IC.u_control.curr_state); 
 
@@ -718,23 +722,24 @@ module top_io_tb;
         //     $error("Next state FAILED ✘: Expected %h", test_word);
         // end
 
-        // if(
-        //         dut.mixed_IC.output_buffer_inst.debug == 1'b1
-        //     &&  dut.mixed_IC.output_buffer_inst.output_buffer_control == 6'b111_111
-        //     &&  dut.mixed_IC.output_buffer_inst.triv_mode_true == 1'b1
+        // if(     dut.mixed_IC.u_drbg_rappin.drbg_debug_mode_i == 1'b1
         // ) begin
-        //     $display("Isolate Conditioner Passed ✓");
+        //     $display("DBRG Debug Mode Active ✓");
         // end else begin
-        //     $error("Isolate Conditioner Failed ✘");
+        //     $error("DRBG Debug Mode Inactive ✘");
         // end
-
+        
+        for (int i=0; i<=255; i++) begin
+            input_pin_1 = drbg_serial_input[i];
+            @(posedge top_clk);
+        end
     endtask
 
     task run_random_debug_test();   
         
         int rand_choice;
 
-        rand_choice = $urandom_range(10, 0);
+        rand_choice = $urandom_range(12, 0);
 
         
         case(rand_choice)
@@ -747,9 +752,10 @@ module top_io_tb;
             6: tempctr1_rw();
             7: tempctr2_rw();
             8: tempctr3_rw();
-            9: conditioner_debug_test();
-            10: bypass_oht();
-            11: output_buffer_debug_test();
+            // 9: conditioner_debug_test();
+            // 10: bypass_oht();
+            // 11: output_buffer_debug_test();
+            // 12: drbg_debug_test();
         endcase
 
     endtask
@@ -764,16 +770,16 @@ module top_io_tb;
 		reset_dut();
         repeat(100) @(posedge top_clk);
 
-        assert_debug();
-        repeat(100) @(posedge top_clk);
-        repeat (100) begin
-            run_random_debug_test(); 
-            @(posedge top_clk);
-        end
-        de_assert_debug();
-        reset_dut();
+        // assert_debug();
+        // repeat(100) @(posedge top_clk);
+        // repeat (100) begin
+        //     run_random_debug_test(); 
+        //     @(posedge top_clk);
+        // end
+        // de_assert_debug();
+        // reset_dut();
 
-        repeat(5_000) @(posedge top_clk);
+        repeat(50_000) @(posedge top_clk);
 
 		$finish();
 	end

@@ -83,7 +83,7 @@ module top_io_tb;
 	//Drive clocks
 	initial begin
         ic_clk = 0;
-        forever #10 ic_clk = ~ic_clk;
+        forever #7 ic_clk = ~ic_clk;
     end
 
 	top_io dut(
