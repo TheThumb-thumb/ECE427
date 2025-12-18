@@ -13,4 +13,6 @@ verdi/
 verdiLog/
 *.daidir
 *.o
+hdl/.oalib
+
 

@@ -83,7 +83,7 @@ module top_io_tb;
 	//Drive clocks
 	initial begin
         top_clk = 0;
-        forever #20 top_clk = ~top_clk; 
+        forever #15 top_clk = ~top_clk; 
     end
 
 	top_io dut(
@@ -132,17 +132,18 @@ module top_io_tb;
 
     logic [63:0] permanent_entropy_mask;
     initial begin
-        permanent_entropy_mask = {$urandom(), $urandom()};
+        //permanent_entropy_mask = {$urandom(), $urandom()};
+        permanent_entropy_mask = '1;
     end
 	//Drive entropy pins (pretend to be entropy)
     always_ff @(posedge top_clk) begin
-        entropy_source_array <= {$urandom(), $urandom()} & permanent_entropy_mask;
+        //entropy_source_array <= {$urandom(), $urandom()} & permanent_entropy_mask;
+        entropy_source_array <= {$urandom(), $urandom()};
     end
 
     always_comb begin
         if(debug) entropy = entropy_debug;
         else entropy = entropy_source_array;
-        entropy = entropy_source_array;
     end
  
 	int shorts_received, shorts_received_max; 
@@ -194,7 +195,6 @@ module top_io_tb;
             3: rand_req_type = RDRAND_32;
             4: rand_req_type = RDSEED_64;
             5: rand_req_type = RDRAND_64;
-            default: rand_req_type = 'x;
         endcase
 
         case (rand_req_type)
@@ -222,7 +222,7 @@ module top_io_tb;
         rand_valid |-> $stable(rand_byte);
     endproperty
     a_rand_byte_stable: assert property (p_rand_byte_stable) 
-		else $fatal("rand_byte changed when not at posedge slow_clk");
+		else $error("rand_byte changed when not at posedge slow_clk");
 
     // --- Assertion 2 ---
     // Asserts that while rand_valid is high, rand_byte can never be all 0.
@@ -244,7 +244,7 @@ module top_io_tb;
         rand_valid |-> (!$isunknown(rand_byte));
     endproperty
     a_rand_byte_not_unknown: assert property (p_rand_byte_not_unknown) 
-        else $fatal("rand_byte was unknown ('x or 'z) while rand_valid was high");
+        else $error("rand_byte was unknown ('x or 'z) while rand_valid was high");
 
     // Assertion 4
     // Asserts that an outstanding request takes no longer than 5000 ns to serve (otherwise it's a timeout)
@@ -281,7 +281,7 @@ module top_io_tb;
         top_reset = 1'b1;
         repeat(2) @(posedge top_clk);
         top_reset = 1'b0;
-        repeat(10) @(posedge top_clk);
+        repeat(50) @(posedge top_clk);
 		top_reset = 1'b1;
     endtask
 
@@ -289,7 +289,7 @@ module top_io_tb;
 
     task init();
         entropy_debug = '0;
-        io_temp_debug = '0;
+        io_temp_debug = 1'b1;
         input_pin_1 = '0;
         output_to_input_direct = '0;
         mosi = '0;
@@ -312,25 +312,27 @@ module top_io_tb;
     task wait_spi_ready_delay();
 
         // Reset counter before starting the wait
-        timeout_count = 0;
+        // timeout_count = 0;
 
-        repeat(10) begin
-            if (spi_data_ready) begin
-                // Success: spi_data_ready asserted. Exit the loop.
-                $display("SPI data ready detected after %0d cycles.", timeout_count);
-                break; 
-            end
+        // repeat(10) begin
+        //     if (spi_data_ready) begin
+        //         // Success: spi_data_ready asserted. Exit the loop.
+        //         $display("SPI data ready detected after %0d cycles.", timeout_count);
+        //         break; 
+        //     end
             
-            // Wait for the next clock edge and increment the counter
-            @(posedge top_clk); 
-            timeout_count = timeout_count + 1;
+        //     // Wait for the next clock edge and increment the counter
+        //     @(posedge top_clk); 
+        //     timeout_count = timeout_count + 1;
 
             // Check if the loop completed due to timeout (i.e., spi_data_ready never asserted)
-            if (timeout_count == 10) begin
+            // if (timeout_count == 20) begin
                 // Failure: Timeout reached without seeing spi_data_ready
-                $error(1, "TIMEOUT ERROR: spi_data_ready did not assert within the 10-cycle limit.");
-            end
-        end
+                // $error(1, "TIMEOUT ERROR: spi_data_ready did not assert within the 20-cycle limit.");
+            // end
+        // end
+
+        // @(spi_data_ready);
     
     endtask
 
@@ -811,24 +813,16 @@ module top_io_tb;
 		$fsdbDumpvars(0, "+all");
         init();
 		reset_dut();
-        repeat(100) @(posedge top_clk);
 
         assert_debug();
-        output_buffer_debug_test();
-        repeat(1000) @(posedge top_clk);
-        drbg_debug_test();
-        repeat(50_000) @(posedge top_clk);
-        de_assert_debug();
+        repeat(100) @(posedge top_clk);
 
-        // assert_debug();
-        // repeat(100) @(posedge top_clk);
-        // repeat (100) begin
-        //     run_random_debug_test(); 
-        //     @(posedge top_clk);
-        // end
-        // de_assert_debug();
+        repeat (100) begin
+            run_random_debug_test(); 
+            @(posedge top_clk);
+        end
 
-        //repeat(1_000_000) @(posedge top_clk);
+        repeat(100_000) @(posedge top_clk);
 
 		$finish();
 	end

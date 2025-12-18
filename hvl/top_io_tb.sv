@@ -136,23 +136,25 @@ module top_io_tb;
 	);
 
     logic [63:0] permanent_entropy_mask;
-    initial begin
-        permanent_entropy_mask = {$urandom(), $urandom()};
-    end
 	//Drive entropy pins (pretend to be entropy)
+
+    initial begin
+        permanent_entropy_mask <= {$urandom(), $urandom()};
+    end
+
     always_ff @(posedge top_clk) begin
         entropy_source_array <= {$urandom(), $urandom()} & permanent_entropy_mask;
     end
 
     always_comb begin
-        if(debug) entropy = entropy_debug;
-        else entropy = entropy_source_array;
+        // if(debug) entropy = entropy_debug;
+        // else entropy = entropy_source_array;
+        entropy = entropy_source_array;
     end
  
 	int shorts_received, shorts_received_max; 
 
 	initial begin
-		debug = 1'b0;
         temp_counter_0 = {1'b0, 12'hECE};
         temp_counter_1 = {1'b0, 12'hECE};
         temp_counter_2 = {1'b0, 12'hECE};
@@ -281,7 +283,7 @@ module top_io_tb;
         top_reset = 1'b1;
         repeat(2) @(posedge top_clk);
         top_reset = 1'b0;
-        repeat(2) @(posedge top_clk);
+        repeat(50) @(posedge top_clk);
 		top_reset = 1'b1;
     endtask
 
@@ -290,6 +292,7 @@ module top_io_tb;
     task init();
         entropy_debug = '0;
         io_temp_debug = '0;
+        debug = '0;
         input_pin_1 = '0;
         output_to_input_direct = '0;
         mosi = '0;
@@ -807,16 +810,16 @@ module top_io_tb;
 
         repeat(100_000) @(posedge top_clk);
 
-        // assert_debug();
+        assert_debug();
 
-        // reset_dut();
+        repeat(100) @(posedge top_clk);
+        repeat (400) begin
+            run_random_debug_test(); 
+            @(posedge top_clk);
+        end
 
-        // output_buffer_debug_test();
-
-        // repeat(10000) @(posedge top_clk);
-
-        // drbg_debug_test();
-        // de_assert_debug();
+        drbg_debug_test();
+        de_assert_debug();
 
 		$finish();
 	end

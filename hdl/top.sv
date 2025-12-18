@@ -268,7 +268,7 @@ module top (
         .seed_o(seed),
 
         //Debug control signals and data ports
-        .debug(debug), // Change this toc onditioner_debug??
+        .debug(debug),
         .serial_input(CTD_debug_input),
         .debug_register(curr_state[6:0])
     );
